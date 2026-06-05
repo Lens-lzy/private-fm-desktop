@@ -5,6 +5,7 @@ import { installCorsBypass } from './cors'
 import { registerSecretsIpc } from './ipc/secrets'
 import { registerConfigIpc, migrateConfig } from './ipc/config'
 import { registerMediaIpc } from './ipc/media'
+import { registerShortcutsIpc, applyGlobalShortcuts } from './ipc/shortcuts'
 import { registerDesktopLyricsIpc, restoreDesktopLyrics } from './ipc/desktopLyrics'
 import { registerUpdateIpc, checkOnLaunch } from './update'
 import { createTray } from './tray'
@@ -41,12 +42,14 @@ if (!app.requestSingleInstanceLock()) {
     registerSecretsIpc()
     registerConfigIpc()
     registerMediaIpc()
+    registerShortcutsIpc()
     registerDesktopLyricsIpc()
     registerUpdateIpc()
 
     createMainWindow()
     createTray()
     restoreDesktopLyrics()
+    applyGlobalShortcuts() // 按持久化配置注册全局快捷键
 
     // 启动几秒后静默检查更新（窗口已就绪，避免拖慢启动）
     setTimeout(() => void checkOnLaunch(), 4000)

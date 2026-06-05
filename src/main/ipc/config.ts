@@ -8,13 +8,40 @@ export interface DesktopLyricsPrefs {
 
 export type ThemeName = 'dark' | 'light'
 
+export interface ShortcutBinding {
+  local: string
+  global: string
+}
+export interface ShortcutsPrefs {
+  enableGlobal: boolean
+  useMediaKeys: boolean
+  keys: Record<string, ShortcutBinding>
+}
+
 export interface AppConfig {
   serverURL: string
   quality: string
   theme: ThemeName
   desktopLyrics: DesktopLyricsPrefs
+  shortcuts: ShortcutsPrefs
   skippedVersion: string
   serverMigrated: boolean
+}
+
+// 默认快捷键：须与渲染层 services/shortcuts.ts 的 DEFAULT_SHORTCUTS 保持一致
+const DEFAULT_SHORTCUTS: ShortcutsPrefs = {
+  enableGlobal: true,
+  useMediaKeys: true,
+  keys: {
+    playpause: { local: 'Space', global: 'Ctrl+Cmd+P' },
+    prev: { local: 'Cmd+Left', global: 'Ctrl+Cmd+Left' },
+    next: { local: 'Cmd+Right', global: 'Ctrl+Cmd+Right' },
+    volup: { local: 'Cmd+Up', global: 'Ctrl+Cmd+Up' },
+    voldown: { local: 'Cmd+Down', global: 'Ctrl+Cmd+Down' },
+    like: { local: 'Cmd+L', global: 'Ctrl+Cmd+L' },
+    lyrics: { local: 'Cmd+R', global: 'Ctrl+Cmd+R' },
+    nowplaying: { local: 'Ctrl+Cmd+M', global: '' }
+  }
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -23,8 +50,18 @@ const DEFAULT_CONFIG: AppConfig = {
   quality: '128k',
   theme: 'dark',
   desktopLyrics: { enabled: false, twoLines: false },
+  shortcuts: DEFAULT_SHORTCUTS,
   skippedVersion: '',
   serverMigrated: false
+}
+
+/** 合并存储的 shortcuts 与默认值，保证缺失的 action/字段都有兜底。 */
+function mergeShortcuts(stored?: Partial<ShortcutsPrefs>): ShortcutsPrefs {
+  return {
+    enableGlobal: stored?.enableGlobal ?? DEFAULT_SHORTCUTS.enableGlobal,
+    useMediaKeys: stored?.useMediaKeys ?? DEFAULT_SHORTCUTS.useMediaKeys,
+    keys: { ...DEFAULT_SHORTCUTS.keys, ...(stored?.keys || {}) }
+  }
 }
 
 const store = new Store<AppConfig>({ name: 'config', defaults: DEFAULT_CONFIG })
@@ -35,6 +72,7 @@ export function getConfig(): AppConfig {
     quality: store.get('quality', DEFAULT_CONFIG.quality),
     theme: store.get('theme', DEFAULT_CONFIG.theme),
     desktopLyrics: { ...DEFAULT_CONFIG.desktopLyrics, ...store.get('desktopLyrics') },
+    shortcuts: mergeShortcuts(store.get('shortcuts')),
     skippedVersion: store.get('skippedVersion', DEFAULT_CONFIG.skippedVersion),
     serverMigrated: store.get('serverMigrated', DEFAULT_CONFIG.serverMigrated)
   }
@@ -60,6 +98,14 @@ export function setConfig(patch: Partial<AppConfig>): AppConfig {
   if (patch.theme !== undefined) store.set('theme', patch.theme)
   if (patch.desktopLyrics !== undefined) {
     store.set('desktopLyrics', { ...getConfig().desktopLyrics, ...patch.desktopLyrics })
+  }
+  if (patch.shortcuts !== undefined) {
+    const cur = getConfig().shortcuts
+    store.set('shortcuts', {
+      enableGlobal: patch.shortcuts.enableGlobal ?? cur.enableGlobal,
+      useMediaKeys: patch.shortcuts.useMediaKeys ?? cur.useMediaKeys,
+      keys: { ...cur.keys, ...(patch.shortcuts.keys || {}) }
+    })
   }
   if (patch.skippedVersion !== undefined) store.set('skippedVersion', String(patch.skippedVersion))
   if (patch.serverMigrated !== undefined) store.set('serverMigrated', Boolean(patch.serverMigrated))

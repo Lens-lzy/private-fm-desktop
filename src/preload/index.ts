@@ -38,6 +38,13 @@ const api = {
       ipcRenderer.on('pf:media:key', (_e, cmd: string) => cb(cmd))
     }
   },
+  shortcuts: {
+    apply: (): Promise<string[]> => ipcRenderer.invoke('pf:shortcuts:apply'),
+    onAction: (cb: (action: string) => void): void => {
+      ipcRenderer.removeAllListeners('pf:shortcut:action')
+      ipcRenderer.on('pf:shortcut:action', (_e, action: string) => cb(action))
+    }
+  },
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('pf:app:version')
   },

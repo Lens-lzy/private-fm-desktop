@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { serverURL, quality, setServerURL, setQualityLocal } from '@/services/session'
-import type { Quality, DesktopLyricsPrefs, ThemeName } from '@/types'
+import { cloneDefaultShortcuts } from '@/services/shortcuts'
+import type { Quality, DesktopLyricsPrefs, ThemeName, ShortcutsPrefs } from '@/types'
 
 function applyTheme(theme: ThemeName): void {
   document.documentElement.dataset.theme = theme
@@ -12,17 +13,22 @@ export const useSettingsStore = defineStore('settings', () => {
   const audioQuality = ref<Quality>((quality() as Quality) || '128k')
   const theme = ref<ThemeName>('dark')
   const desktopLyrics = ref<DesktopLyricsPrefs>({ enabled: false, twoLines: false })
+  const shortcuts = ref<ShortcutsPrefs>(cloneDefaultShortcuts())
+  const invalidGlobals = ref<string[]>([]) // 全局注册失败的 action（被占用/非法），供 UI 标红
+  const recordingShortcut = ref(false) // 设置页正在录制改键时为 true，应用内快捷键暂时让路
 
   function hydrate(cfg: {
     serverURL?: string
     quality?: string
     theme?: ThemeName
     desktopLyrics?: DesktopLyricsPrefs
+    shortcuts?: ShortcutsPrefs
   }): void {
     if (cfg.serverURL) server.value = cfg.serverURL
     if (cfg.quality) audioQuality.value = cfg.quality as Quality
     if (cfg.theme) theme.value = cfg.theme
     if (cfg.desktopLyrics) desktopLyrics.value = cfg.desktopLyrics
+    if (cfg.shortcuts) shortcuts.value = cfg.shortcuts
     applyTheme(theme.value)
   }
 
@@ -70,11 +76,51 @@ export const useSettingsStore = defineStore('settings', () => {
     })
   }
 
+  // ---- 快捷键 ----
+  async function persistShortcuts(): Promise<void> {
+    await window.pf.config.set({ shortcuts: shortcuts.value })
+  }
+  /** 重新注册全局快捷键并记录失败项（标红）。 */
+  async function applyGlobalShortcuts(): Promise<void> {
+    invalidGlobals.value = (await window.pf.shortcuts.apply()) || []
+  }
+  /** 设置某 action 的本地/全局键位（accel 空串=清除）。 */
+  async function setBinding(
+    action: string,
+    kind: 'local' | 'global',
+    accel: string
+  ): Promise<void> {
+    const prev = shortcuts.value.keys[action] || { local: '', global: '' }
+    shortcuts.value = {
+      ...shortcuts.value,
+      keys: { ...shortcuts.value.keys, [action]: { ...prev, [kind]: accel } }
+    }
+    await persistShortcuts()
+    if (kind === 'global') await applyGlobalShortcuts()
+  }
+  async function setEnableGlobal(on: boolean): Promise<void> {
+    shortcuts.value = { ...shortcuts.value, enableGlobal: on }
+    await persistShortcuts()
+    await applyGlobalShortcuts()
+  }
+  async function setUseMediaKeys(on: boolean): Promise<void> {
+    shortcuts.value = { ...shortcuts.value, useMediaKeys: on }
+    await persistShortcuts()
+  }
+  async function resetShortcuts(): Promise<void> {
+    shortcuts.value = cloneDefaultShortcuts()
+    await persistShortcuts()
+    await applyGlobalShortcuts()
+  }
+
   return {
     server,
     audioQuality,
     theme,
     desktopLyrics,
+    shortcuts,
+    invalidGlobals,
+    recordingShortcut,
     hydrate,
     updateServer,
     updateQuality,
@@ -82,6 +128,11 @@ export const useSettingsStore = defineStore('settings', () => {
     updateDesktopLyrics,
     toggleDesktopLyrics,
     syncDesktopLyrics,
-    watchDesktopLyricsState
+    watchDesktopLyricsState,
+    applyGlobalShortcuts,
+    setBinding,
+    setEnableGlobal,
+    setUseMediaKeys,
+    resetShortcuts
   }
 })

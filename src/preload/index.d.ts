@@ -5,11 +5,22 @@ export interface DesktopLyricsPrefs {
 
 export type ThemeName = 'dark' | 'light'
 
+export interface ShortcutBinding {
+  local: string
+  global: string
+}
+export interface ShortcutsPrefs {
+  enableGlobal: boolean
+  useMediaKeys: boolean
+  keys: Record<string, ShortcutBinding>
+}
+
 export interface AppConfig {
   serverURL: string
   quality: string
   theme: ThemeName
   desktopLyrics: DesktopLyricsPrefs
+  shortcuts: ShortcutsPrefs
 }
 
 export interface LyricPushPayload {
@@ -66,6 +77,12 @@ export interface PFBridge {
   }
   media: {
     onMediaKey: (cb: (cmd: string) => void) => void
+  }
+  shortcuts: {
+    /** 按当前 config 重新注册全局快捷键，返回注册失败的 action id 列表（供 UI 标红）。 */
+    apply: () => Promise<string[]>
+    /** 全局快捷键触发时回调（携带 action id）。 */
+    onAction: (cb: (action: string) => void) => void
   }
   app: {
     getVersion: () => Promise<string>

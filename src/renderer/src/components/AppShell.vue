@@ -20,6 +20,7 @@ import Icon from './Icon.vue'
 import { useUpdatesStore } from '@/stores/updates'
 import { useNowPlayingSync } from '@/composables/useNowPlayingSync'
 import { useMediaKeys } from '@/composables/useMediaKeys'
+import { useShortcuts } from '@/composables/useShortcuts'
 import { useDesktopLyricsSync } from '@/composables/useDesktopLyricsSync'
 
 const auth = useAuthStore()
@@ -35,6 +36,7 @@ const route = useRoute()
 
 useNowPlayingSync()
 useMediaKeys()
+useShortcuts()
 useDesktopLyricsSync()
 
 const keyword = ref('')

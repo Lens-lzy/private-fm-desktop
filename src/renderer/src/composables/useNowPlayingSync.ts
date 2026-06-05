@@ -1,33 +1,42 @@
 import { watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
 import { resolveCover } from '@/services/covers'
 import { songSinger, songAlbum } from '@/utils/format'
 
 /**
  * 系统 Now Playing 集成（macOS 媒体信息中心 + 硬件媒体键），零原生模块：
  * 用 Chromium 内置 navigator.mediaSession。设置 metadata / playbackState / action handlers。
- * 媒体键由 MediaSession 处理；不另注册 globalShortcut，避免双触发。
+ * 硬件媒体键由 MediaSession 处理；是否响应受设置「使用系统媒体快捷键」开关控制（关闭则解绑 handler）。
+ * 不另注册 globalShortcut 处理硬件键，避免双触发（自定义全局键走 useShortcuts）。
  */
 export function useNowPlayingSync(): void {
   const player = usePlayerStore()
+  const settings = useSettingsStore()
 
   if (!('mediaSession' in navigator)) return
 
-  navigator.mediaSession.setActionHandler('play', () => {
-    if (!player.isPlaying) player.togglePlay()
-  })
-  navigator.mediaSession.setActionHandler('pause', () => {
-    if (player.isPlaying) player.togglePlay()
-  })
-  navigator.mediaSession.setActionHandler('previoustrack', () => player.prev())
-  navigator.mediaSession.setActionHandler('nexttrack', () => player.next())
-  try {
-    navigator.mediaSession.setActionHandler('seekto', (d) => {
-      if (typeof d.seekTime === 'number') player.seek(d.seekTime)
-    })
-  } catch {
-    /* 个别平台不支持 seekto */
+  // 按「使用系统媒体快捷键」开关绑定/解绑硬件键 handler（元数据/进度仍始终同步）
+  function applyMediaHandlers(on: boolean): void {
+    const ms = navigator.mediaSession
+    ms.setActionHandler('play', on ? () => { if (!player.isPlaying) player.togglePlay() } : null)
+    ms.setActionHandler('pause', on ? () => { if (player.isPlaying) player.togglePlay() } : null)
+    ms.setActionHandler('previoustrack', on ? () => player.prev() : null)
+    ms.setActionHandler('nexttrack', on ? () => player.next() : null)
+    try {
+      ms.setActionHandler(
+        'seekto',
+        on
+          ? (d) => {
+              if (typeof d.seekTime === 'number') player.seek(d.seekTime)
+            }
+          : null
+      )
+    } catch {
+      /* 个别平台不支持 seekto */
+    }
   }
+  watch(() => settings.shortcuts.useMediaKeys, (on) => applyMediaHandlers(!!on), { immediate: true })
 
   // 元数据：随当前曲变化
   watch(

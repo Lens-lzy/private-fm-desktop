@@ -116,10 +116,22 @@ export interface DesktopLyricsPrefs {
 
 export type ThemeName = 'dark' | 'light'
 
+/** 单条快捷键：本应用内（local）+ 全局系统级（global）两套，accelerator 字符串（如 'Ctrl+Cmd+P'，空串=未设）。 */
+export interface ShortcutBinding {
+  local: string
+  global: string
+}
+export interface ShortcutsPrefs {
+  enableGlobal: boolean // 启用全局快捷键（应用在后台也响应）
+  useMediaKeys: boolean // 使用系统媒体快捷键（硬件 播放/暂停 等）
+  keys: Record<string, ShortcutBinding>
+}
+
 /** 主进程 electron-store 的运行时配置（结构与 preload AppConfig 一致）。 */
 export interface RuntimeConfig {
   serverURL: string
   quality: string
   theme: ThemeName
   desktopLyrics: DesktopLyricsPrefs
+  shortcuts: ShortcutsPrefs
 }
