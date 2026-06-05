@@ -13,13 +13,17 @@ const execFileP = promisify(execFile)
 /**
  * 未签名 macOS 应用的「全自动更新」：检测 → 下载 .app 的 zip（带进度）→ 解压 →
  * 剥隔离标记 → 后台脚本替换旧 .app → 重启新版本。失败自动兜底成手动下载 dmg。
- * 数据源：GitHub Releases latest（可用 env PF_UPDATE_FEED 覆盖，测试/自托管）。
+ * 数据源：**自家后端的更新代理** `${serverURL}/api/update/latest`（服务器侧从 GitHub 取包、
+ * 经 Cloudflare 转发，绕开国内连不上的 GitHub 下载 CDN）。返回体与 GitHub Release 同构。
+ * 可用 env PF_UPDATE_FEED 覆盖；serverURL 为空时回退直连 GitHub。
  */
-// GitHub 仓库（owner/repo）：自动更新从这里的 Releases latest 拉取；仓库 public、资产含 .dmg + .app 的 zip
 const GITHUB_REPO = 'Lens-lzy/private-fm-desktop'
 
 function feedURL(): string {
-  return process.env.PF_UPDATE_FEED || `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+  if (process.env.PF_UPDATE_FEED) return process.env.PF_UPDATE_FEED
+  const base = String(getConfig().serverURL || '').replace(/\/+$/, '')
+  if (base) return base + '/api/update/latest'
+  return `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
 }
 
 export interface UpdateInfo {
