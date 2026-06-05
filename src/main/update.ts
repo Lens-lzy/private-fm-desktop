@@ -1,8 +1,9 @@
 import { app, ipcMain, shell } from 'electron'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { createWriteStream } from 'node:fs'
-import { mkdtemp, writeFile, readdir } from 'node:fs/promises'
+import { createWriteStream, existsSync } from 'node:fs'
+import { mkdtemp, writeFile, readdir, readFile, mkdir, copyFile, rm, stat, open } from 'node:fs/promises'
+import { gunzip } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { getConfig, setConfig } from './ipc/config'
@@ -123,6 +124,199 @@ async function downloadZip(url: string, dest: string): Promise<void> {
   )
 }
 
+// ---- 差量更新（blockmap diff）：只下载变化的字节块，未变部分从本地旧包拷贝 ----
+// electron-builder 为 zip 生成同名 .blockmap（gzip 后的 JSON：把文件切成内容定界的块，
+// 每块带 size 与 checksum）。新旧 blockmap 按 checksum 比对：相同的块直接从本地旧 zip 拷，
+// 不同的块用 HTTP Range 只下这一段，再拼出新 zip。省下绝大部分流量（beta→beta 常只差几 MB）。
+const gunzipP = promisify(gunzip)
+function updCacheDir(): string {
+  return join(app.getPath('userData'), 'pf-updates')
+}
+
+interface BlockMap {
+  offset: number
+  checksums: string[]
+  sizes: number[]
+}
+async function parseBlockMap(buf: Buffer): Promise<BlockMap> {
+  const j = JSON.parse((await gunzipP(buf)).toString('utf8')) as {
+    files?: { offset?: number; checksums?: string[]; sizes?: number[] }[]
+  }
+  const f = j.files && j.files[0]
+  if (
+    !f ||
+    !Array.isArray(f.checksums) ||
+    !Array.isArray(f.sizes) ||
+    f.checksums.length !== f.sizes.length
+  ) {
+    throw new Error('无效 blockmap')
+  }
+  return { offset: f.offset || 0, checksums: f.checksums, sizes: f.sizes }
+}
+
+async function fetchBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  return Buffer.from(await res.arrayBuffer())
+}
+
+type DiffSeg =
+  | { type: 'copy'; oldOffset: number; size: number }
+  | { type: 'download'; start: number; end: number }
+
+/** 按新旧 blockmap 生成重建计划：哪些段从旧包拷、哪些段需下载（连续待下块合并成一个 Range）。 */
+function buildPlan(
+  oldMap: BlockMap,
+  newMap: BlockMap
+): { segs: DiffSeg[]; downloadBytes: number; newSize: number } {
+  const oldAt = new Map<string, number>()
+  let oo = oldMap.offset
+  for (let i = 0; i < oldMap.checksums.length; i++) {
+    if (!oldAt.has(oldMap.checksums[i])) oldAt.set(oldMap.checksums[i], oo)
+    oo += oldMap.sizes[i]
+  }
+  const segs: DiffSeg[] = []
+  let no = newMap.offset
+  let downloadBytes = 0
+  for (let i = 0; i < newMap.checksums.length; i++) {
+    const size = newMap.sizes[i]
+    const from = oldAt.get(newMap.checksums[i])
+    const last = segs[segs.length - 1]
+    if (from !== undefined) {
+      if (last && last.type === 'copy' && last.oldOffset + last.size === from) last.size += size
+      else segs.push({ type: 'copy', oldOffset: from, size })
+    } else {
+      if (last && last.type === 'download' && last.end === no) last.end = no + size
+      else segs.push({ type: 'download', start: no, end: no + size })
+      downloadBytes += size
+    }
+    no += size
+  }
+  return { segs, downloadBytes, newSize: no }
+}
+
+/** 执行重建计划：拷贝段从旧 zip 读、下载段用 Range 取，按序写出到 outPath（带进度）。 */
+async function executePlan(
+  segs: DiffSeg[],
+  downloadBytes: number,
+  oldZip: string,
+  zipUrl: string,
+  outPath: string
+): Promise<void> {
+  const fh = await open(oldZip, 'r')
+  const out = createWriteStream(outPath)
+  const put = (b: Buffer): Promise<void> =>
+    new Promise((res, rej) => out.write(b, (e) => (e ? rej(e) : res())))
+  let got = 0
+  try {
+    for (const seg of segs) {
+      if (seg.type === 'copy') {
+        let pos = seg.oldOffset
+        let left = seg.size
+        while (left > 0) {
+          const len = Math.min(1 << 20, left)
+          const buf = Buffer.allocUnsafe(len)
+          const { bytesRead } = await fh.read(buf, 0, len, pos)
+          if (bytesRead !== len) throw new Error('旧包读取不足')
+          await put(buf)
+          pos += len
+          left -= len
+        }
+      } else {
+        const res = await fetch(zipUrl, {
+          headers: { Range: `bytes=${seg.start}-${seg.end - 1}` }
+        })
+        if (res.status !== 206 || !res.body) throw new Error('Range 失败 HTTP ' + res.status)
+        const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          await put(Buffer.from(value))
+          got += value.byteLength
+          sendMain('pf:update:progress', {
+            percent: downloadBytes ? Math.round((got / downloadBytes) * 100) : 0,
+            received: got,
+            total: downloadBytes,
+            phase: 'diff'
+          })
+        }
+      }
+    }
+  } finally {
+    await fh.close()
+    await new Promise<void>((res, rej) => out.end((e?: Error | null) => (e ? rej(e) : res())))
+  }
+}
+
+/** 尝试差量下载新 zip 到 dest；成功 true，任何不满足/出错 false（调用方退回全量）。 */
+async function tryDifferential(info: UpdateInfo, dest: string): Promise<boolean> {
+  try {
+    const cur = app.getVersion()
+    const oldZip = join(updCacheDir(), `${cur}.zip`)
+    const oldMapPath = join(updCacheDir(), `${cur}.zip.blockmap`)
+    if (!existsSync(oldZip) || !existsSync(oldMapPath)) return false
+    const [oldMapBuf, newMapBuf] = await Promise.all([
+      readFile(oldMapPath),
+      fetchBuffer(info.zipUrl + '.blockmap')
+    ])
+    const { segs, downloadBytes, newSize } = buildPlan(
+      await parseBlockMap(oldMapBuf),
+      await parseBlockMap(newMapBuf)
+    )
+    // 省得不多（仍需下 >80%）就别折腾多段 Range，直接全量更稳更快
+    if (downloadBytes > newSize * 0.8) return false
+    sendMain('pf:update:progress', { percent: 0, phase: 'diff' })
+    await executePlan(segs, downloadBytes, oldZip, info.zipUrl, dest)
+    if ((await stat(dest)).size !== newSize) throw new Error('重建大小不符')
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** ditto 解压 zip → 找出 .app → 剥隔离，返回新 .app 路径。 */
+async function extractApp(zip: string, dir: string): Promise<string> {
+  sendMain('pf:update:progress', { percent: 100, phase: 'extracting' })
+  const extract = join(dir, 'app')
+  await rm(extract, { recursive: true, force: true }).catch(() => {})
+  await execFileP('ditto', ['-x', '-k', zip, extract])
+  const appName = (await readdir(extract)).find((e) => e.endsWith('.app'))
+  if (!appName) throw new Error('解压后未找到 .app')
+  const newApp = join(extract, appName)
+  await execFileP('xattr', ['-dr', 'com.apple.quarantine', newApp]).catch(() => {})
+  return newApp
+}
+
+/** 取包并解压：先试差量，失败/差量包损坏→退回全量。返回新 .app 路径与所用 zip 路径。 */
+async function obtainAndExtract(
+  info: UpdateInfo,
+  dir: string
+): Promise<{ newApp: string; zip: string }> {
+  const zip = join(dir, 'update.zip')
+  const viaDiff = await tryDifferential(info, zip)
+  if (!viaDiff) await downloadZip(info.zipUrl, zip)
+  try {
+    return { newApp: await extractApp(zip, dir), zip }
+  } catch (e) {
+    if (!viaDiff) throw e
+    // 差量重建出的包无法解压 → 退回全量重下一次
+    await downloadZip(info.zipUrl, zip)
+    return { newApp: await extractApp(zip, dir), zip }
+  }
+}
+
+/** 把刚装好的 zip + 其 blockmap 存到 userData，供下次差量比对；只保留最新一份。 */
+async function saveArtifactsForNextDiff(zip: string, info: UpdateInfo): Promise<void> {
+  const cdir = updCacheDir()
+  await mkdir(cdir, { recursive: true })
+  for (const f of await readdir(cdir).catch(() => [])) {
+    await rm(join(cdir, f), { force: true }).catch(() => {})
+  }
+  await copyFile(zip, join(cdir, `${info.latest}.zip`))
+  const mapBuf = await fetchBuffer(info.zipUrl + '.blockmap')
+  await writeFile(join(cdir, `${info.latest}.zip.blockmap`), mapBuf)
+}
+
 // 后台替换脚本：等本进程退出 → 备份旧包 → 拷新包 → 重开；失败则回滚。
 const SWAP_SCRIPT = `#!/bin/bash
 PID="$1"; NEW="$2"; TARGET="$3"
@@ -159,21 +353,15 @@ export async function downloadAndInstall(): Promise<void> {
   try {
     sendMain('pf:update:progress', { percent: 0 })
     const dir = await mkdtemp(join(tmpdir(), 'pf-upd-'))
-    const zip = join(dir, 'update.zip')
-    await downloadZip(info.zipUrl, zip)
-    sendMain('pf:update:progress', { percent: 100, phase: 'extracting' })
-    const extract = join(dir, 'app')
-    await execFileP('ditto', ['-x', '-k', zip, extract])
-    const appName = (await readdir(extract)).find((e) => e.endsWith('.app'))
-    if (!appName) throw new Error('解压后未找到 .app')
-    const newApp = join(extract, appName)
-    await execFileP('xattr', ['-dr', 'com.apple.quarantine', newApp]).catch(() => {})
+    const { newApp, zip } = await obtainAndExtract(info, dir)
     const target = currentAppBundle()
     if (!app.isPackaged || !target) {
       // 开发模式不真正替换（execPath 指向 Electron.app）
       sendMain('pf:update:ready-dev', { newApp, target })
       return
     }
+    // 存好本版 zip+blockmap 供下次差量比对（best-effort，存不下不影响本次更新）
+    await saveArtifactsForNextDiff(zip, info).catch(() => {})
     const script = join(dir, 'swap.sh')
     await writeFile(script, SWAP_SCRIPT, { mode: 0o755 })
     spawn('/bin/bash', [script, String(process.pid), newApp, target], {
