@@ -1,0 +1,23 @@
+appId: com.privatefm.desktop
+productName: Private FM
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**/*
+  - package.json
+# 无付费 Apple 账号：不签名、不公证，朋友右键打开绕 Gatekeeper（README 写明 xattr 去隔离）。
+mac:
+  category: public.app-category.music
+  target:
+    - dmg # 首次安装 / 手动兜底
+    - zip # 应用内全自动更新（下载 .app 的 zip 替换重启）
+    - dir
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  icon: resources/icon.png
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+dmg:
+  title: Private FM
+  artifactName: ${productName}-${version}-${arch}.${ext}
