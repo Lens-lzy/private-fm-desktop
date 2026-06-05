@@ -14,6 +14,10 @@ type LyricPayload = {
   pos: number
   playing: boolean
   twoLines: boolean
+  colorMode: 'solid' | 'gradient'
+  colorSolid: string
+  colorFrom: string
+  colorTo: string
 }
 
 const lyricsApi = {

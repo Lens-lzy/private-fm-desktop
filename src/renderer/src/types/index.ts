@@ -112,6 +112,12 @@ export type Quality = '128k' | '320k' | 'flac'
 export interface DesktopLyricsPrefs {
   enabled: boolean
   twoLines: boolean
+  colorMode: 'solid' | 'gradient'
+  colorSolid: string
+  colorFrom: string
+  colorTo: string
+  menuBar: boolean
+  touchBar: boolean
 }
 
 export type ThemeName = 'dark' | 'light'

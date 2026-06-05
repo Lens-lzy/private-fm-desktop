@@ -2,6 +2,8 @@ import { ipcMain } from 'electron'
 import { getConfig, setConfig } from './config'
 import { sendMediaKey, type MediaCommand } from './media'
 import { getMainWindow } from '../windows/mainWindow'
+import { setTrayTitle } from '../tray'
+import { applyTouchBar, updateTouchBar } from '../touchBar'
 import {
   createLyricsWindow,
   destroyLyricsWindow,
@@ -32,11 +34,39 @@ let lastPayload: LyricPayload = {
 function pushToWindow(): void {
   const win = getLyricsWindow()
   if (win && !win.isDestroyed()) {
+    const dl = getConfig().desktopLyrics
     win.webContents.send('lyric:update', {
       ...lastPayload,
-      twoLines: getConfig().desktopLyrics.twoLines
+      twoLines: dl.twoLines,
+      colorMode: dl.colorMode,
+      colorSolid: dl.colorSolid,
+      colorFrom: dl.colorFrom,
+      colorTo: dl.colorTo
     })
   }
+}
+
+/** 当前正在唱的那一句（菜单栏 / Touch Bar 用）。 */
+function currentLine(): string {
+  return lastPayload.activeRow === 1 ? lastPayload.bottom : lastPayload.top
+}
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + '…' : s
+}
+
+/** 随每次歌词推送刷新菜单栏 / Touch Bar 文字（仅在对应开关开启时）。 */
+function tickLyricBars(): void {
+  const dl = getConfig().desktopLyrics
+  if (dl.menuBar) setTrayTitle(truncate(currentLine() || '♪ Private FM', 24))
+  if (dl.touchBar) updateTouchBar(currentLine(), lastPayload.playing)
+}
+
+/** 按当前配置挂载/卸载菜单栏与 Touch Bar 歌词（开关变化或启动时调用）。 */
+export function applyLyricBars(): void {
+  const dl = getConfig().desktopLyrics
+  setTrayTitle(dl.menuBar ? truncate(currentLine() || '♪ Private FM', 24) : '')
+  applyTouchBar(!!dl.touchBar)
+  if (dl.touchBar) updateTouchBar(currentLine(), lastPayload.playing)
 }
 
 export function isDesktopLyricsShowing(): boolean {
@@ -70,6 +100,11 @@ export function registerDesktopLyricsIpc(): void {
   ipcMain.handle('pf:dl:toggle', () => toggleDesktopLyrics())
   ipcMain.handle('pf:dl:set-enabled', (_e, on: boolean) => setDesktopLyricsEnabled(!!on))
   ipcMain.handle('pf:dl:is-showing', () => isDesktopLyricsShowing())
+  // 颜色/菜单栏/Touch Bar 等配置变更后：重推浮窗 + 重挂菜单栏/Touch Bar
+  ipcMain.on('pf:dl:apply-config', () => {
+    pushToWindow()
+    applyLyricBars()
+  })
 
   // 主窗口推送当前/下一句 + 播放态
   ipcMain.on('pf:dl:push', (_e, payload: LyricPayload) => {
@@ -83,6 +118,7 @@ export function registerDesktopLyricsIpc(): void {
       playing: !!payload.playing
     }
     pushToWindow()
+    tickLyricBars()
   })
 
   // 程序化拖动/缩放（focusable:false 下系统拖动被禁，改由此实现）
@@ -130,7 +166,8 @@ export function registerDesktopLyricsIpc(): void {
   })
 }
 
-/** 启动时若上次启用了桌面歌词，则恢复显示。 */
+/** 启动时若上次启用了桌面歌词，则恢复显示；并按配置挂载菜单栏 / Touch Bar 歌词。 */
 export function restoreDesktopLyrics(): void {
   if (getConfig().desktopLyrics.enabled) setDesktopLyricsEnabled(true)
+  applyLyricBars()
 }

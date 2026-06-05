@@ -26,7 +26,16 @@ export const useSettingsStore = defineStore('settings', () => {
   const server = ref(serverURL())
   const audioQuality = ref<Quality>((quality() as Quality) || '128k')
   const theme = ref<ThemeName>('dark')
-  const desktopLyrics = ref<DesktopLyricsPrefs>({ enabled: false, twoLines: false })
+  const desktopLyrics = ref<DesktopLyricsPrefs>({
+    enabled: false,
+    twoLines: false,
+    colorMode: 'solid',
+    colorSolid: '#1ed760',
+    colorFrom: '#1ed760',
+    colorTo: '#36c5ff',
+    menuBar: false,
+    touchBar: false
+  })
   const shortcuts = ref<ShortcutsPrefs>(cloneDefaultShortcuts())
   const invalidGlobals = ref<string[]>([]) // 全局注册失败的 action（被占用/非法），供 UI 标红
   const recordingShortcut = ref(false) // 设置页正在录制改键时为 true，应用内快捷键暂时让路
@@ -42,7 +51,8 @@ export const useSettingsStore = defineStore('settings', () => {
   }): void {
     if (cfg.serverURL) server.value = cfg.serverURL
     if (cfg.quality) audioQuality.value = cfg.quality as Quality
-    if (cfg.theme) theme.value = cfg.theme
+    // 1.0 暂锁深色：浅色主题仍有组件写死深色配色，避免进入半成品状态。完成后改回 `cfg.theme`。
+    theme.value = 'dark'
     if (cfg.desktopLyrics) desktopLyrics.value = cfg.desktopLyrics
     if (cfg.shortcuts) shortcuts.value = cfg.shortcuts
     if (cfg.playback) playback.value = { ...DEFAULT_PLAYBACK, ...cfg.playback }
@@ -75,6 +85,8 @@ export const useSettingsStore = defineStore('settings', () => {
   async function updateDesktopLyrics(patch: Partial<DesktopLyricsPrefs>): Promise<void> {
     desktopLyrics.value = { ...desktopLyrics.value, ...patch }
     await window.pf.config.set({ desktopLyrics: desktopLyrics.value })
+    // 通知主进程立即应用：重推浮窗配色 + 挂/卸菜单栏与 Touch Bar 歌词
+    window.pf.desktopLyrics.applyConfig()
   }
 
   /** 开/关桌面歌词浮窗（主进程已持久化 enabled，这里同步本地状态）。 */

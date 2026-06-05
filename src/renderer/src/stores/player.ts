@@ -28,6 +28,13 @@ function songDur(s: Song | null): number {
   return 0
 }
 
+const VOL_KEY = 'pf.volume'
+/** 音量持久化（设备级 localStorage），避免每次启动重置。 */
+function readVolume(): number {
+  const v = Number(localStorage.getItem(VOL_KEY))
+  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.8
+}
+
 const LAST_POS_KEY = 'pf.lastpos'
 /** 记住上次播放进度：按歌曲 key 存最后位置（设备级 localStorage）。 */
 function saveLastPos(key: string, t: number): void {
@@ -58,7 +65,7 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const currentTime = ref(0)
   const duration = ref(0)
-  const volume = ref(0.8)
+  const volume = ref(readVolume())
   const repeatMode = ref<RepeatMode>('off')
   const shuffle = ref(false)
   const isLoadingTrack = ref(false)
@@ -335,6 +342,11 @@ export const usePlayerStore = defineStore('player', () => {
   function setVolume(v: number): void {
     volume.value = v
     audioEngine.setVolume(v)
+    try {
+      localStorage.setItem(VOL_KEY, String(v))
+    } catch {
+      /* ignore */
+    }
   }
 
   function cycleRepeat(): void {

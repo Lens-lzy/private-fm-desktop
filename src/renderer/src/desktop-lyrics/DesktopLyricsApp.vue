@@ -9,6 +9,22 @@ const activeRow = ref(0) // 0=上行在唱，1=下行在唱
 const playing = ref(false)
 const twoLines = ref(false)
 
+// 已唱文字配色（来自设置）：纯色 / 渐变
+const colorMode = ref<'solid' | 'gradient'>('solid')
+const colorSolid = ref('#1ed760')
+const colorFrom = ref('#1ed760')
+const colorTo = ref('#36c5ff')
+const fillStyle = computed(() =>
+  colorMode.value === 'gradient'
+    ? {
+        backgroundImage: `linear-gradient(90deg, ${colorFrom.value}, ${colorTo.value})`,
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        color: 'transparent'
+      }
+    : { color: colorSolid.value }
+)
+
 // 卡拉OK扫光：据当前句时间轴，用 wall-clock 在两次推送之间逐帧平滑推进
 const fill = ref(0) // 0..1，正在唱那一行的绿色覆盖比例
 let lineStart = 0 // 当前句开始(s)
@@ -105,6 +121,10 @@ onMounted(() => {
     activeRow.value = p.activeRow === 1 ? 1 : 0
     playing.value = !!p.playing
     twoLines.value = !!p.twoLines
+    if (p.colorMode) colorMode.value = p.colorMode === 'gradient' ? 'gradient' : 'solid'
+    if (p.colorSolid) colorSolid.value = p.colorSolid
+    if (p.colorFrom) colorFrom.value = p.colorFrom
+    if (p.colorTo) colorTo.value = p.colorTo
     lineStart = Number(p.start) || 0
     lineEnd = Number(p.end) || 0
     anchorPos = Number(p.pos) || 0
@@ -185,9 +205,9 @@ function onResizeDown(e: MouseEvent): void {
       >
         <span class="dl-line">
           <span class="dl-base">{{ r.text }}</span>
-          <span class="dl-fill" :style="{ width: r.fill * 100 + '%' }" aria-hidden="true">{{
-            r.text
-          }}</span>
+          <span class="dl-fill" :style="{ width: r.fill * 100 + '%' }" aria-hidden="true">
+            <span class="dl-fill-text" :style="fillStyle">{{ r.text }}</span>
+          </span>
         </span>
       </div>
     </div>
@@ -281,7 +301,7 @@ function onResizeDown(e: MouseEvent): void {
 }
 /* 共用描边：紧贴字形的 1px 描边（无模糊），任意背景都清晰 */
 .dl-base,
-.dl-fill {
+.dl-fill-text {
   text-shadow:
     -1px -1px 0 rgba(0, 0, 0, 0.4),
     1px -1px 0 rgba(0, 0, 0, 0.4),
@@ -296,16 +316,20 @@ function onResizeDown(e: MouseEvent): void {
   text-overflow: ellipsis;
   color: rgba(255, 255, 255, 0.9);
 }
-/* 覆盖层：已唱（绿），从左按 width% 裁切，绿色随播放从左向右铺开 */
+/* 覆盖层：已唱部分，从左按 width% 裁切，颜色随播放从左向右铺开 */
 .dl-fill {
   position: absolute;
   left: 0;
   top: 0;
   width: 0;
   overflow: hidden;
+  will-change: width;
+}
+/* 已唱文字：整段宽度=全句宽度（渐变贴合整句，扫光时颜色稳定不缩放）；颜色由 fillStyle 注入 */
+.dl-fill-text {
+  display: inline-block;
   white-space: nowrap;
   color: #1ed760;
-  will-change: width;
 }
 
 /* 扁平小按钮（无圆形背景） */

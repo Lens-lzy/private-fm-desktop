@@ -1,6 +1,12 @@
 export interface DesktopLyricsPrefs {
   enabled: boolean
   twoLines: boolean
+  colorMode: 'solid' | 'gradient'
+  colorSolid: string
+  colorFrom: string
+  colorTo: string
+  menuBar: boolean
+  touchBar: boolean
 }
 
 export type ThemeName = 'dark' | 'light'
@@ -42,9 +48,13 @@ export interface LyricPushPayload {
   playing: boolean
 }
 
-/** 主进程注入 twoLines 后下发给桌面歌词窗口的载荷。 */
+/** 主进程注入 twoLines + 颜色后下发给桌面歌词窗口的载荷。 */
 export interface LyricRenderPayload extends LyricPushPayload {
   twoLines: boolean
+  colorMode: 'solid' | 'gradient'
+  colorSolid: string
+  colorFrom: string
+  colorTo: string
 }
 
 export interface UpdateInfo {
@@ -82,6 +92,7 @@ export interface PFBridge {
     setEnabled: (on: boolean) => Promise<boolean>
     isShowing: () => Promise<boolean>
     push: (payload: LyricPushPayload) => void
+    applyConfig: () => void
     onStateChanged: (cb: (on: boolean) => void) => void
   }
   media: {

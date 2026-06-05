@@ -4,6 +4,12 @@ import Store from 'electron-store'
 export interface DesktopLyricsPrefs {
   enabled: boolean
   twoLines: boolean
+  colorMode: 'solid' | 'gradient' // 已唱文字配色：纯色 / 渐变
+  colorSolid: string // 纯色（hex）
+  colorFrom: string // 渐变起色
+  colorTo: string // 渐变止色
+  menuBar: boolean // 在 macOS 菜单栏显示当前歌词
+  touchBar: boolean // 在 Touch Bar 显示当前歌词 + 播控
 }
 
 export type ThemeName = 'dark' | 'light'
@@ -66,7 +72,16 @@ const DEFAULT_CONFIG: AppConfig = {
   serverURL: 'https://fm.bonjor.fun',
   quality: '128k',
   theme: 'dark',
-  desktopLyrics: { enabled: false, twoLines: false },
+  desktopLyrics: {
+    enabled: false,
+    twoLines: false,
+    colorMode: 'solid',
+    colorSolid: '#1ed760',
+    colorFrom: '#1ed760',
+    colorTo: '#36c5ff',
+    menuBar: false,
+    touchBar: false
+  },
   shortcuts: DEFAULT_SHORTCUTS,
   playback: DEFAULT_PLAYBACK,
   skippedVersion: '',

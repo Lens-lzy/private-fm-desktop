@@ -26,6 +26,8 @@ const api = {
       pos: number
       playing: boolean
     }): void => ipcRenderer.send('pf:dl:push', payload),
+    // 颜色/菜单栏/Touch Bar 等配置变更后通知主进程应用
+    applyConfig: (): void => ipcRenderer.send('pf:dl:apply-config'),
     // 主进程在浮窗开/关时回推状态，供「词」按钮同步
     onStateChanged: (cb: (on: boolean) => void): void => {
       ipcRenderer.removeAllListeners('pf:dl:state')

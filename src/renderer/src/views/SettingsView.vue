@@ -8,7 +8,7 @@ import { useRecentsStore } from '@/stores/recents'
 import { useUiStore } from '@/stores/ui'
 import { useUpdatesStore } from '@/stores/updates'
 import { SHORTCUT_ROWS, formatAccel, eventToAccel } from '@/services/shortcuts'
-import type { Quality, ThemeName, PlaybackPrefs } from '@/types'
+import type { Quality, ThemeName, PlaybackPrefs, DesktopLyricsPrefs } from '@/types'
 
 const auth = useAuthStore()
 const settings = useSettingsStore()
@@ -145,6 +145,32 @@ async function setTheme(t: ThemeName): Promise<void> {
 async function toggleDesktopLyrics(): Promise<void> {
   await settings.toggleDesktopLyrics()
 }
+
+// ---- 桌面歌词：配色 + 菜单栏 / Touch Bar ----
+function setDL(patch: Partial<DesktopLyricsPrefs>): void {
+  void settings.updateDesktopLyrics(patch)
+}
+function val(e: Event): string {
+  return (e.target as HTMLInputElement).value
+}
+const solidPresets = ['#1ed760', '#36c5ff', '#ff5e9c', '#ffb13c', '#b388ff', '#ffffff']
+const gradPresets = [
+  { from: '#1ed760', to: '#36c5ff' },
+  { from: '#ff5e9c', to: '#b06bff' },
+  { from: '#ffb13c', to: '#ff5e62' },
+  { from: '#36c5ff', to: '#7a5cff' }
+]
+const previewStyle = computed(() => {
+  const d = settings.desktopLyrics
+  return d.colorMode === 'gradient'
+    ? {
+        backgroundImage: `linear-gradient(90deg, ${d.colorFrom}, ${d.colorTo})`,
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        color: 'transparent'
+      }
+    : { color: d.colorSolid }
+})
 
 async function logout(): Promise<void> {
   await auth.logout()
@@ -371,7 +397,7 @@ async function checkUpdate(): Promise<void> {
             <h4>最近播放记录</h4>
             <label class="chk">
               <input type="checkbox" :checked="settings.playback.syncRecents" @change="setPlay({ syncRecents: chk($event) })" />
-              <span>开启后，同步当前账号在各设备的最近播放记录</span>
+              <span>记录播放历史到账号</span><span class="muted">（多端同步将随移动端上线启用）</span>
             </label>
           </div>
 
@@ -415,18 +441,21 @@ async function checkUpdate(): Promise<void> {
         <div class="cat-side">皮肤</div>
         <div class="cat-main">
           <div class="block">
-            <h4>主题（开发中）</h4>
+            <h4>主题</h4>
             <div class="quality-row">
               <button
                 v-for="t in themes"
                 :key="t.id"
                 class="q-btn"
                 :class="{ active: settings.theme === t.id }"
+                :disabled="t.id === 'light'"
+                :title="t.id === 'light' ? '浅色主题开发中' : ''"
                 @click="setTheme(t.id)"
               >
-                {{ t.label }}
+                {{ t.label }}{{ t.id === 'light' ? '（开发中）' : '' }}
               </button>
             </div>
+            <p class="sc-hint">浅色主题仍在打磨，正式版先提供深色。</p>
           </div>
         </div>
       </section>
@@ -446,6 +475,91 @@ async function checkUpdate(): Promise<void> {
                 {{ settings.desktopLyrics.enabled ? '已开启' : '开启' }}
               </button>
             </div>
+          </div>
+
+          <div class="block">
+            <h4>歌词颜色（已唱部分）</h4>
+            <div class="quality-row" style="margin-bottom: 12px">
+              <button
+                class="q-btn"
+                :class="{ active: settings.desktopLyrics.colorMode === 'solid' }"
+                @click="setDL({ colorMode: 'solid' })"
+              >
+                纯色
+              </button>
+              <button
+                class="q-btn"
+                :class="{ active: settings.desktopLyrics.colorMode === 'gradient' }"
+                @click="setDL({ colorMode: 'gradient' })"
+              >
+                渐变
+              </button>
+            </div>
+
+            <div v-if="settings.desktopLyrics.colorMode === 'solid'" class="color-row">
+              <input
+                class="color-pick"
+                type="color"
+                :value="settings.desktopLyrics.colorSolid"
+                @input="setDL({ colorSolid: val($event) })"
+              />
+              <div class="swatches">
+                <span
+                  v-for="c in solidPresets"
+                  :key="c"
+                  class="sw"
+                  :style="{ background: c }"
+                  @click="setDL({ colorSolid: c })"
+                ></span>
+              </div>
+            </div>
+
+            <div v-else class="color-row">
+              <input
+                class="color-pick"
+                type="color"
+                :value="settings.desktopLyrics.colorFrom"
+                @input="setDL({ colorFrom: val($event) })"
+              />
+              <span class="grad-arrow">→</span>
+              <input
+                class="color-pick"
+                type="color"
+                :value="settings.desktopLyrics.colorTo"
+                @input="setDL({ colorTo: val($event) })"
+              />
+              <div class="swatches">
+                <span
+                  v-for="g in gradPresets"
+                  :key="g.from + g.to"
+                  class="sw"
+                  :style="{ background: `linear-gradient(90deg, ${g.from}, ${g.to})` }"
+                  @click="setDL({ colorFrom: g.from, colorTo: g.to })"
+                ></span>
+              </div>
+            </div>
+
+            <div class="ly-preview"><span :style="previewStyle">桌面歌词 Lyrics 预览</span></div>
+          </div>
+
+          <div class="block">
+            <h4>其他显示</h4>
+            <label class="chk">
+              <input
+                type="checkbox"
+                :checked="settings.desktopLyrics.menuBar"
+                @change="setDL({ menuBar: chk($event) })"
+              />
+              <span>在菜单栏显示当前歌词</span>
+            </label>
+            <label class="chk">
+              <input
+                type="checkbox"
+                :checked="settings.desktopLyrics.touchBar"
+                @change="setDL({ touchBar: chk($event) })"
+              />
+              <span>在 Touch Bar 显示歌词</span><span class="muted">（仅带触控栏的 Mac）</span>
+            </label>
           </div>
         </div>
       </section>
@@ -695,6 +809,10 @@ async function checkUpdate(): Promise<void> {
   color: #000;
   border-color: var(--green);
 }
+.q-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .logout-btn {
   border: 1px solid #5a3030;
   color: #f15e6c;
@@ -706,6 +824,55 @@ async function checkUpdate(): Promise<void> {
 }
 .logout-btn:hover {
   border-color: #f15e6c;
+}
+
+/* 歌词配色 */
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.color-pick {
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.grad-arrow {
+  color: var(--muted);
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sw {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.sw:hover {
+  transform: scale(1.12);
+}
+.ly-preview {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #161616;
+  font-size: 22px;
+  font-weight: 800;
+  text-align: center;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.4),
+    1px -1px 0 rgba(0, 0, 0, 0.4),
+    -1px 1px 0 rgba(0, 0, 0, 0.4),
+    1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 /* 勾选 / 单选 */

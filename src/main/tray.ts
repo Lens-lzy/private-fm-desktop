@@ -64,3 +64,13 @@ export function createTray(): void {
   // 左键点击图标也能呼出菜单 / 显示主窗口
   tray.on('click', showMain)
 }
+
+/** 菜单栏歌词：在托盘图标旁显示文字（空串=只剩图标）。 */
+export function setTrayTitle(text: string): void {
+  if (tray && !tray.isDestroyed()) tray.setTitle(text || '')
+}
+
+/** 刷新托盘右键菜单（如「桌面歌词」勾选态）。 */
+export function refreshTrayMenu(): void {
+  refreshMenu()
+}
