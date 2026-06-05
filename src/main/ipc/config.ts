@@ -18,12 +18,21 @@ export interface ShortcutsPrefs {
   keys: Record<string, ShortcutBinding>
 }
 
+export interface PlaybackPrefs {
+  autoplay: boolean // 启动时自动播放（默认关）
+  resume: boolean // 启动时记住上次播放进度（默认开）
+  notify: boolean // 后台时歌曲切换发系统通知（默认开）
+  doubleClick: 'replace' | 'add' // 双击单曲：替换队列 / 仅添加这首（默认 replace）
+  syncRecents: boolean // 同步各设备最近播放（默认开）
+}
+
 export interface AppConfig {
   serverURL: string
   quality: string
   theme: ThemeName
   desktopLyrics: DesktopLyricsPrefs
   shortcuts: ShortcutsPrefs
+  playback: PlaybackPrefs
   skippedVersion: string
   serverMigrated: boolean
 }
@@ -44,6 +53,14 @@ const DEFAULT_SHORTCUTS: ShortcutsPrefs = {
   }
 }
 
+const DEFAULT_PLAYBACK: PlaybackPrefs = {
+  autoplay: false,
+  resume: true,
+  notify: true,
+  doubleClick: 'replace',
+  syncRecents: true
+}
+
 const DEFAULT_CONFIG: AppConfig = {
   // 默认线上后端（Cloudflare Tunnel + 自有域名），可在登录页/设置页修改（对齐 Swift AppConfig.defaultServerURL）
   serverURL: 'https://fm.bonjor.fun',
@@ -51,6 +68,7 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: 'dark',
   desktopLyrics: { enabled: false, twoLines: false },
   shortcuts: DEFAULT_SHORTCUTS,
+  playback: DEFAULT_PLAYBACK,
   skippedVersion: '',
   serverMigrated: false
 }
@@ -64,6 +82,10 @@ function mergeShortcuts(stored?: Partial<ShortcutsPrefs>): ShortcutsPrefs {
   }
 }
 
+function mergePlayback(stored?: Partial<PlaybackPrefs>): PlaybackPrefs {
+  return { ...DEFAULT_PLAYBACK, ...(stored || {}) }
+}
+
 const store = new Store<AppConfig>({ name: 'config', defaults: DEFAULT_CONFIG })
 
 export function getConfig(): AppConfig {
@@ -73,6 +95,7 @@ export function getConfig(): AppConfig {
     theme: store.get('theme', DEFAULT_CONFIG.theme),
     desktopLyrics: { ...DEFAULT_CONFIG.desktopLyrics, ...store.get('desktopLyrics') },
     shortcuts: mergeShortcuts(store.get('shortcuts')),
+    playback: mergePlayback(store.get('playback')),
     skippedVersion: store.get('skippedVersion', DEFAULT_CONFIG.skippedVersion),
     serverMigrated: store.get('serverMigrated', DEFAULT_CONFIG.serverMigrated)
   }
@@ -106,6 +129,9 @@ export function setConfig(patch: Partial<AppConfig>): AppConfig {
       useMediaKeys: patch.shortcuts.useMediaKeys ?? cur.useMediaKeys,
       keys: { ...cur.keys, ...(patch.shortcuts.keys || {}) }
     })
+  }
+  if (patch.playback !== undefined) {
+    store.set('playback', { ...getConfig().playback, ...patch.playback })
   }
   if (patch.skippedVersion !== undefined) store.set('skippedVersion', String(patch.skippedVersion))
   if (patch.serverMigrated !== undefined) store.set('serverMigrated', Boolean(patch.serverMigrated))

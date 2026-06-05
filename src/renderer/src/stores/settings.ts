@@ -2,7 +2,21 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { serverURL, quality, setServerURL, setQualityLocal } from '@/services/session'
 import { cloneDefaultShortcuts } from '@/services/shortcuts'
-import type { Quality, DesktopLyricsPrefs, ThemeName, ShortcutsPrefs } from '@/types'
+import type {
+  Quality,
+  DesktopLyricsPrefs,
+  ThemeName,
+  ShortcutsPrefs,
+  PlaybackPrefs
+} from '@/types'
+
+const DEFAULT_PLAYBACK: PlaybackPrefs = {
+  autoplay: false,
+  resume: true,
+  notify: true,
+  doubleClick: 'replace',
+  syncRecents: true
+}
 
 function applyTheme(theme: ThemeName): void {
   document.documentElement.dataset.theme = theme
@@ -16,6 +30,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const shortcuts = ref<ShortcutsPrefs>(cloneDefaultShortcuts())
   const invalidGlobals = ref<string[]>([]) // 全局注册失败的 action（被占用/非法），供 UI 标红
   const recordingShortcut = ref(false) // 设置页正在录制改键时为 true，应用内快捷键暂时让路
+  const playback = ref<PlaybackPrefs>({ ...DEFAULT_PLAYBACK })
 
   function hydrate(cfg: {
     serverURL?: string
@@ -23,13 +38,21 @@ export const useSettingsStore = defineStore('settings', () => {
     theme?: ThemeName
     desktopLyrics?: DesktopLyricsPrefs
     shortcuts?: ShortcutsPrefs
+    playback?: PlaybackPrefs
   }): void {
     if (cfg.serverURL) server.value = cfg.serverURL
     if (cfg.quality) audioQuality.value = cfg.quality as Quality
     if (cfg.theme) theme.value = cfg.theme
     if (cfg.desktopLyrics) desktopLyrics.value = cfg.desktopLyrics
     if (cfg.shortcuts) shortcuts.value = cfg.shortcuts
+    if (cfg.playback) playback.value = { ...DEFAULT_PLAYBACK, ...cfg.playback }
     applyTheme(theme.value)
+  }
+
+  /** 更新播放偏好（部分字段）并持久化。 */
+  async function updatePlayback(patch: Partial<PlaybackPrefs>): Promise<void> {
+    playback.value = { ...playback.value, ...patch }
+    await window.pf.config.set({ playback: playback.value })
   }
 
   async function updateTheme(t: ThemeName): Promise<void> {
@@ -121,7 +144,9 @@ export const useSettingsStore = defineStore('settings', () => {
     shortcuts,
     invalidGlobals,
     recordingShortcut,
+    playback,
     hydrate,
+    updatePlayback,
     updateServer,
     updateQuality,
     updateTheme,

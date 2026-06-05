@@ -28,6 +28,25 @@ function songDur(s: Song | null): number {
   return 0
 }
 
+const LAST_POS_KEY = 'pf.lastpos'
+/** 记住上次播放进度：按歌曲 key 存最后位置（设备级 localStorage）。 */
+function saveLastPos(key: string, t: number): void {
+  if (!key || !(t > 1)) return
+  try {
+    localStorage.setItem(LAST_POS_KEY, JSON.stringify({ key, t }))
+  } catch {
+    /* ignore */
+  }
+}
+function readLastPos(key: string): number {
+  try {
+    const v = JSON.parse(localStorage.getItem(LAST_POS_KEY) || 'null')
+    return v && v.key === key && typeof v.t === 'number' ? v.t : 0
+  } catch {
+    return 0
+  }
+}
+
 export const usePlayerStore = defineStore('player', () => {
   const lyrics = useLyricsStore()
   const ui = useUiStore()
@@ -52,6 +71,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   let playToken = 0
   let persistTimer: ReturnType<typeof setTimeout> | undefined
+  let posTick = 0 // onTime 节流计数，约每 5 秒存一次播放进度
 
   const current = computed<Song | null>(() =>
     index.value >= 0 && index.value < queue.value.length ? queue.value[index.value] : null
@@ -76,8 +96,13 @@ export const usePlayerStore = defineStore('player', () => {
         const c = current.value
         if (c) {
           lyrics.load(c)
-          lyrics.updateIndex(0)
           duration.value = songDur(c) // 进度条 max 可用（音源尚未加载）
+          // 记住上次进度：恢复 currentTime，播放时 loadAndPlay 的 startAt 会从此处续播
+          const pos = settings.playback.resume ? readLastPos(keyOf(c)) : 0
+          currentTime.value = pos > 1 ? pos : 0
+          lyrics.updateIndex(currentTime.value)
+          // 启动自动播放（默认关；开启则从续播位置开始播）
+          if (settings.playback.autoplay) void loadAndPlay(index.value)
         }
       }
     } catch {
@@ -125,7 +150,7 @@ export const usePlayerStore = defineStore('player', () => {
     }
     isLoadingTrack.value = false
     statusMessage.value = ''
-    void api.recordHistory(s).catch(() => {})
+    if (settings.playback.syncRecents) void api.recordHistory(s).catch(() => {})
     recents.add(s)
     lyrics.load(s)
   }
@@ -354,6 +379,10 @@ export const usePlayerStore = defineStore('player', () => {
     onTime: (t) => {
       currentTime.value = t
       lyrics.updateIndex(t)
+      if (++posTick >= 20) {
+        posTick = 0
+        saveLastPos(keyOf(current.value), t) // 节流存进度，供下次启动续播
+      }
     },
     onDuration: (d) => {
       // 仅采用有效时长；流不报时长（NaN/Infinity）时保留 _interval 兜底，避免进度条 max 被清零
@@ -365,6 +394,7 @@ export const usePlayerStore = defineStore('player', () => {
     },
     onPause: () => {
       isPlaying.value = false
+      saveLastPos(keyOf(current.value), currentTime.value) // 暂停即存进度
     }
   })
   audioEngine.setVolume(volume.value)

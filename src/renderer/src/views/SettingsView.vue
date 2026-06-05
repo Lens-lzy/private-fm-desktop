@@ -8,7 +8,7 @@ import { useRecentsStore } from '@/stores/recents'
 import { useUiStore } from '@/stores/ui'
 import { useUpdatesStore } from '@/stores/updates'
 import { SHORTCUT_ROWS, formatAccel, eventToAccel } from '@/services/shortcuts'
-import type { Quality, ThemeName } from '@/types'
+import type { Quality, ThemeName, PlaybackPrefs } from '@/types'
 
 const auth = useAuthStore()
 const settings = useSettingsStore()
@@ -23,6 +23,7 @@ const tabs = [
   { id: 'account', label: '账号' },
   { id: 'general', label: '常规' },
   { id: 'playback', label: '播放' },
+  { id: 'skin', label: '皮肤' },
   { id: 'lyrics', label: '桌面歌词' },
   { id: 'shortcuts', label: '快捷键' },
   { id: 'about', label: '关于' }
@@ -56,12 +57,19 @@ function onScroll(): void {
       if (el.offsetTop <= y) cur = el.dataset.sec as string
       else break
     }
-    // 触底时强制选中最后一类（末类可能太短，offsetTop 到不了顶部）
     if (body.scrollTop + body.clientHeight >= body.scrollHeight - 2) {
       cur = secs[secs.length - 1].dataset.sec as string
     }
     if (cur && cur !== activeTab.value) activeTab.value = cur
   })
+}
+
+// ---- 播放设置 ----
+function chk(e: Event): boolean {
+  return (e.target as HTMLInputElement).checked
+}
+function setPlay(p: Partial<PlaybackPrefs>): void {
+  void settings.updatePlayback(p)
 }
 
 // ---- 睡眠 / 数据 ----
@@ -151,19 +159,19 @@ function recKey(action: string, kind: string): string {
 function onRecKeydown(e: KeyboardEvent): void {
   if (!rec.value) return
   e.preventDefault()
-  e.stopImmediatePropagation() // capture 阶段：先于全局快捷键，避免录制时误触发
+  e.stopImmediatePropagation()
   const [action, kind] = rec.value.split(':') as [string, 'local' | 'global']
   if (e.key === 'Escape') {
-    stopRec() // 取消
+    stopRec()
     return
   }
   if (e.key === 'Backspace' || e.key === 'Delete') {
-    void settings.setBinding(action, kind, '') // 清除
+    void settings.setBinding(action, kind, '')
     stopRec()
     return
   }
   const accel = eventToAccel(e)
-  if (!accel) return // 仅按下修饰键 → 等主键
+  if (!accel) return
   void settings.setBinding(action, kind, accel)
   stopRec()
 }
@@ -173,7 +181,7 @@ function startRec(action: string, kind: 'local' | 'global'): void {
     stopRec()
     return
   }
-  window.removeEventListener('keydown', onRecKeydown, true) // 清掉可能残留的监听
+  window.removeEventListener('keydown', onRecKeydown, true)
   rec.value = key
   settings.recordingShortcut = true
   window.addEventListener('keydown', onRecKeydown, true)
@@ -188,7 +196,6 @@ function display(action: string, kind: 'local' | 'global'): string {
   const b = settings.shortcuts.keys[action]
   return formatAccel(b ? b[kind] : '')
 }
-// 同列重复（非空）的键位 → 冲突标红
 function dupSet(kind: 'local' | 'global'): Set<string> {
   const counts: Record<string, number> = {}
   for (const r of SHORTCUT_ROWS) {
@@ -221,7 +228,7 @@ const appVersion = ref('')
 const checking = ref(false)
 const updateMsg = ref('')
 onMounted(async () => {
-  void settings.applyGlobalShortcuts() // 刷新全局注册结果（失败项标红）
+  void settings.applyGlobalShortcuts()
   try {
     appVersion.value = await window.pf.app.getVersion()
   } catch {
@@ -232,6 +239,10 @@ onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
   stopRec()
 })
+
+function openUpdate(): void {
+  if (updates.info) updates.prompt(updates.info)
+}
 
 async function checkUpdate(): Promise<void> {
   checking.value = true
@@ -252,7 +263,7 @@ async function checkUpdate(): Promise<void> {
 
 <template>
   <div class="settings-view">
-    <!-- 固定头：标题 + tab 页签 -->
+    <!-- 固定头：标题 + tab 页签（满行分割线） -->
     <div class="settings-head">
       <h1 class="settings-title">设置</h1>
       <nav class="settings-tabs">
@@ -264,173 +275,250 @@ async function checkUpdate(): Promise<void> {
           @click="jump(t.id)"
         >
           {{ t.label }}
+          <span v-if="t.id === 'about' && updates.available" class="tab-dot"></span>
         </button>
       </nav>
     </div>
 
-    <!-- 全设置滚动区（点击 tab 跳转 + 滚动联动高亮） -->
+    <!-- 滚动区：每类「左标题 + 右内容」，类间满行分割线 -->
     <div ref="bodyRef" class="settings-body" @scroll="onScroll">
       <!-- 账号 -->
       <section class="settings-cat" data-sec="account">
-        <h3 class="cat-title">账号</h3>
-        <div class="setting-block">
-          <div class="row"><span class="muted">角色</span><span>{{ roleLabel }}</span></div>
-          <div class="row"><span class="muted">用户名</span></div>
-          <div class="server-row">
-            <input v-model="nameInput" placeholder="用户名" @keyup.enter="saveUsername" />
-            <button class="primary" :disabled="savingName" @click="saveUsername">
-              {{ savingName ? '保存中…' : '保存' }}
-            </button>
+        <div class="cat-side">账号</div>
+        <div class="cat-main">
+          <div class="block">
+            <div class="row"><span class="muted">角色</span><span>{{ roleLabel }}</span></div>
+            <div class="row"><span class="muted">用户名</span></div>
+            <div class="server-row">
+              <input v-model="nameInput" placeholder="用户名" @keyup.enter="saveUsername" />
+              <button class="primary" :disabled="savingName" @click="saveUsername">
+                {{ savingName ? '保存中…' : '保存' }}
+              </button>
+            </div>
+            <div v-if="nameMsg" class="invite-ok">{{ nameMsg }}</div>
           </div>
-          <div v-if="nameMsg" class="invite-ok">{{ nameMsg }}</div>
-        </div>
-        <div class="setting-block">
-          <h4>服务器地址</h4>
-          <div class="server-row">
-            <input v-model="serverInput" placeholder="http://localhost:9277" @keyup.enter="applyServer" />
-            <button class="primary" @click="applyServer">保存</button>
+          <div v-if="auth.user?.isAdmin" class="block">
+            <h4>服务器地址<span class="muted tag">仅管理员可见</span></h4>
+            <div class="server-row">
+              <input v-model="serverInput" placeholder="http://localhost:9277" @keyup.enter="applyServer" />
+              <button class="primary" @click="applyServer">保存</button>
+            </div>
+            <div v-if="serverMsg" class="invite-ok">{{ serverMsg }}</div>
           </div>
-          <div v-if="serverMsg" class="invite-ok">{{ serverMsg }}</div>
-        </div>
-        <div class="setting-block no-border">
-          <button class="logout-btn" @click="logout">退出登录</button>
+          <div class="block">
+            <button class="logout-btn" @click="logout">退出登录</button>
+          </div>
         </div>
       </section>
 
       <!-- 常规 -->
       <section class="settings-cat" data-sec="general">
-        <h3 class="cat-title">常规</h3>
-        <div class="setting-block">
-          <h4>皮肤（开发中）</h4>
-          <div class="quality-row">
-            <button
-              v-for="t in themes"
-              :key="t.id"
-              class="q-btn"
-              :class="{ active: settings.theme === t.id }"
-              @click="setTheme(t.id)"
-            >
-              {{ t.label }}
-            </button>
-          </div>
-        </div>
-        <div class="setting-block">
-          <h4>数据</h4>
-          <div class="row">
-            <span class="muted">清空本机「最近播放」记录</span>
-            <button class="q-btn" @click="clearRecents">清空</button>
+        <div class="cat-side">常规</div>
+        <div class="cat-main">
+          <div class="block">
+            <h4>数据</h4>
+            <div class="row">
+              <span class="muted">清空本机「最近播放」记录</span>
+              <button class="q-btn" @click="clearRecents">清空</button>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- 播放 -->
       <section class="settings-cat" data-sec="playback">
-        <h3 class="cat-title">播放</h3>
-        <div class="setting-block">
-          <h4>音质</h4>
-          <div class="quality-row">
-            <button
-              v-for="q in qualities"
-              :key="q"
-              class="q-btn"
-              :class="{ active: settings.audioQuality === q }"
-              @click="setQuality(q)"
+        <div class="cat-side">播放</div>
+        <div class="cat-main">
+          <div class="block">
+            <label class="chk">
+              <input type="checkbox" :checked="settings.playback.autoplay" @change="setPlay({ autoplay: chk($event) })" />
+              <span>程序启动时自动播放</span>
+            </label>
+            <label class="chk">
+              <input type="checkbox" :checked="settings.playback.resume" @change="setPlay({ resume: chk($event) })" />
+              <span>程序启动时记住上一次播放进度</span>
+            </label>
+            <label class="chk">
+              <input type="checkbox" :checked="settings.playback.notify" @change="setPlay({ notify: chk($event) })" />
+              <span>桌面通知</span><span class="muted">（在后台时歌曲切换发送通知）</span>
+            </label>
+          </div>
+
+          <div class="block">
+            <h4>播放列表</h4>
+            <label class="rdo">
+              <input
+                type="radio"
+                name="dc"
+                :checked="settings.playback.doubleClick === 'replace'"
+                @change="setPlay({ doubleClick: 'replace' })"
+              />
+              <span>双击播放单曲时，用当前单曲所在的歌曲列表替换播放列表</span>
+            </label>
+            <label class="rdo">
+              <input
+                type="radio"
+                name="dc"
+                :checked="settings.playback.doubleClick === 'add'"
+                @change="setPlay({ doubleClick: 'add' })"
+              />
+              <span>双击播放单曲时，仅把当前单曲添加到播放列表</span>
+            </label>
+            <p class="sc-hint">将鼠标移到歌曲封面上、点出现的播放按钮，则插入当前列表第一首并立即播放。</p>
+          </div>
+
+          <div class="block">
+            <h4>最近播放记录</h4>
+            <label class="chk">
+              <input type="checkbox" :checked="settings.playback.syncRecents" @change="setPlay({ syncRecents: chk($event) })" />
+              <span>开启后，同步当前账号在各设备的最近播放记录</span>
+            </label>
+          </div>
+
+          <div class="block">
+            <h4>音质</h4>
+            <div class="quality-row">
+              <button
+                v-for="q in qualities"
+                :key="q"
+                class="q-btn"
+                :class="{ active: settings.audioQuality === q }"
+                @click="setQuality(q)"
+              >
+                {{ q.toUpperCase() }}
+              </button>
+            </div>
+          </div>
+
+          <div class="block">
+            <h4>睡眠定时</h4>
+            <div class="quality-row">
+              <button class="q-btn" @click="setSleep(15)">15 分钟</button>
+              <button class="q-btn" @click="setSleep(30)">30 分钟</button>
+              <button class="q-btn" @click="setSleep(60)">60 分钟</button>
+              <button class="q-btn" @click="sleepAfterTrack">本曲播完</button>
+              <button class="q-btn" @click="cancelSleep">取消</button>
+            </div>
+            <div
+              v-if="player.sleepUntil || player.sleepAfterCurrent"
+              class="invite-ok"
+              style="margin-top: 10px"
             >
-              {{ q.toUpperCase() }}
-            </button>
+              {{ player.sleepAfterCurrent ? '将在当前歌曲播完后暂停' : '睡眠定时已设置' }}
+            </div>
           </div>
         </div>
-        <div class="setting-block">
-          <h4>睡眠定时</h4>
-          <div class="quality-row">
-            <button class="q-btn" @click="setSleep(15)">15 分钟</button>
-            <button class="q-btn" @click="setSleep(30)">30 分钟</button>
-            <button class="q-btn" @click="setSleep(60)">60 分钟</button>
-            <button class="q-btn" @click="sleepAfterTrack">本曲播完</button>
-            <button class="q-btn" @click="cancelSleep">取消</button>
-          </div>
-          <div
-            v-if="player.sleepUntil || player.sleepAfterCurrent"
-            class="invite-ok"
-            style="margin-top: 10px"
-          >
-            {{ player.sleepAfterCurrent ? '将在当前歌曲播完后暂停' : '睡眠定时已设置' }}
+      </section>
+
+      <!-- 皮肤 -->
+      <section class="settings-cat" data-sec="skin">
+        <div class="cat-side">皮肤</div>
+        <div class="cat-main">
+          <div class="block">
+            <h4>主题（开发中）</h4>
+            <div class="quality-row">
+              <button
+                v-for="t in themes"
+                :key="t.id"
+                class="q-btn"
+                :class="{ active: settings.theme === t.id }"
+                @click="setTheme(t.id)"
+              >
+                {{ t.label }}
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- 桌面歌词 -->
       <section class="settings-cat" data-sec="lyrics">
-        <h3 class="cat-title">桌面歌词</h3>
-        <div class="setting-block no-border">
-          <div class="row">
-            <span class="muted">在桌面显示浮动歌词（逐字扫光、双行对句、可拖动缩放、悬停控制）</span>
-            <button
-              class="q-btn"
-              :class="{ active: settings.desktopLyrics.enabled }"
-              @click="toggleDesktopLyrics"
-            >
-              {{ settings.desktopLyrics.enabled ? '已开启' : '开启' }}
-            </button>
+        <div class="cat-side">桌面歌词</div>
+        <div class="cat-main">
+          <div class="block">
+            <div class="row">
+              <span class="muted">在桌面显示浮动歌词（逐字扫光、双行对句、可拖动缩放、悬停控制）</span>
+              <button
+                class="q-btn"
+                :class="{ active: settings.desktopLyrics.enabled }"
+                @click="toggleDesktopLyrics"
+              >
+                {{ settings.desktopLyrics.enabled ? '已开启' : '开启' }}
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- 快捷键 -->
       <section class="settings-cat" data-sec="shortcuts">
-        <h3 class="cat-title">快捷键</h3>
-        <div class="setting-block no-border">
-          <div class="sc-table">
-            <div class="sc-row sc-head">
-              <span class="sc-label">功能说明</span>
-              <span class="sc-key-h">快捷键</span>
-              <span class="sc-key-h">全局快捷键</span>
+        <div class="cat-side">快捷键</div>
+        <div class="cat-main">
+          <div class="block">
+            <div class="sc-table">
+              <div class="sc-row sc-head">
+                <span class="sc-label">功能说明</span>
+                <span class="sc-key-h">快捷键</span>
+                <span class="sc-key-h">全局快捷键</span>
+              </div>
+              <div v-for="row in SHORTCUT_ROWS" :key="row.action" class="sc-row">
+                <span class="sc-label">{{ row.label }}</span>
+                <button
+                  class="sc-key"
+                  :class="{ rec: rec === row.action + ':local', invalid: isInvalid(row.action, 'local') }"
+                  @click.stop="startRec(row.action, 'local')"
+                >
+                  {{ rec === row.action + ':local' ? '请按键…' : display(row.action, 'local') }}
+                </button>
+                <button
+                  class="sc-key"
+                  :class="{ rec: rec === row.action + ':global', invalid: isInvalid(row.action, 'global') }"
+                  @click.stop="startRec(row.action, 'global')"
+                >
+                  {{ rec === row.action + ':global' ? '请按键…' : display(row.action, 'global') }}
+                </button>
+              </div>
             </div>
-            <div v-for="row in SHORTCUT_ROWS" :key="row.action" class="sc-row">
-              <span class="sc-label">{{ row.label }}</span>
-              <button
-                class="sc-key"
-                :class="{ rec: rec === row.action + ':local', invalid: isInvalid(row.action, 'local') }"
-                @click.stop="startRec(row.action, 'local')"
-              >
-                {{ rec === row.action + ':local' ? '请按键…' : display(row.action, 'local') }}
-              </button>
-              <button
-                class="sc-key"
-                :class="{ rec: rec === row.action + ':global', invalid: isInvalid(row.action, 'global') }"
-                @click.stop="startRec(row.action, 'global')"
-              >
-                {{ rec === row.action + ':global' ? '请按键…' : display(row.action, 'global') }}
-              </button>
-            </div>
+            <p class="sc-hint">
+              点击键位后按下新组合即可修改；Esc 取消，Delete 清除。红色表示被系统占用或与其它项冲突。
+            </p>
+            <label class="chk">
+              <input type="checkbox" :checked="settings.shortcuts.enableGlobal" @change="onToggleGlobal" />
+              <span>启用全局快捷键</span><span class="muted">（应用在后台时也能响应）</span>
+            </label>
+            <label class="chk">
+              <input type="checkbox" :checked="settings.shortcuts.useMediaKeys" @change="onToggleMedia" />
+              <span>使用系统媒体快捷键</span><span class="muted">（键盘上的 播放/暂停、上一首、下一首）</span>
+            </label>
+            <button class="q-btn sc-reset" @click="resetShortcuts">恢复默认</button>
           </div>
-          <p class="sc-hint">
-            点击键位后按下新组合即可修改；Esc 取消，Delete 清除。红色表示被系统占用或与其它项冲突。
-          </p>
-          <label class="sc-check">
-            <input type="checkbox" :checked="settings.shortcuts.enableGlobal" @change="onToggleGlobal" />
-            <span>启用全局快捷键</span><span class="muted">（应用在后台时也能响应）</span>
-          </label>
-          <label class="sc-check">
-            <input type="checkbox" :checked="settings.shortcuts.useMediaKeys" @change="onToggleMedia" />
-            <span>使用系统媒体快捷键</span><span class="muted">（键盘上的 播放/暂停、上一首、下一首）</span>
-          </label>
-          <button class="q-btn sc-reset" @click="resetShortcuts">恢复默认</button>
         </div>
       </section>
 
       <!-- 关于 -->
       <section class="settings-cat" data-sec="about">
-        <h3 class="cat-title">关于</h3>
-        <div class="setting-block no-border">
-          <div class="row"><span class="muted">当前版本</span><span>{{ appVersion || '—' }}</span></div>
-          <div class="row">
-            <span class="muted">检查软件更新</span>
-            <button class="q-btn" :disabled="checking" @click="checkUpdate">
-              {{ checking ? '检查中…' : '检查更新' }}
-            </button>
+        <div class="cat-side">关于</div>
+        <div class="cat-main">
+          <div class="block">
+            <div class="row">
+              <span class="muted">当前版本</span>
+              <span class="ver-cell">
+                {{ appVersion || '—' }}
+                <span v-if="updates.available" class="ver-dot" title="有新版本"></span>
+              </span>
+            </div>
+            <div v-if="updates.available" class="row">
+              <span class="muted">发现新版本 {{ updates.info?.latest }}</span>
+              <button class="primary" @click="openUpdate">立即更新</button>
+            </div>
+            <div class="row">
+              <span class="muted">检查软件更新</span>
+              <button class="q-btn" :disabled="checking" @click="checkUpdate">
+                {{ checking ? '检查中…' : '检查更新' }}
+              </button>
+            </div>
+            <div v-if="updateMsg" class="invite-ok" style="margin-top: 10px">{{ updateMsg }}</div>
           </div>
-          <div v-if="updateMsg" class="invite-ok" style="margin-top: 10px">{{ updateMsg }}</div>
         </div>
       </section>
 
@@ -491,6 +579,26 @@ async function checkUpdate(): Promise<void> {
   border-radius: 3px;
   background: var(--green-bright);
 }
+.tab-dot {
+  position: absolute;
+  top: 6px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f15e6c;
+}
+.ver-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.ver-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f15e6c;
+}
 
 /* 滚动区 */
 .settings-body {
@@ -499,31 +607,49 @@ async function checkUpdate(): Promise<void> {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-top: 18px;
-}
-.cat-title {
-  font-size: 18px;
-  font-weight: 800;
-  margin: 4px 0 16px;
 }
 .settings-foot {
-  height: 40vh;
+  height: 38vh;
 }
 
-/* 设置块（沿用旧风格） */
-.setting-block {
-  max-width: 560px;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+/* 每类：左标题 + 右内容，类间满行分割线 */
+.settings-cat {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+  padding: 28px 0;
   border-bottom: 1px solid var(--border);
 }
-.setting-block.no-border {
+.settings-cat:last-of-type {
   border-bottom: none;
-  padding-bottom: 0;
 }
-.setting-block h4 {
+.cat-side {
+  flex: 0 0 96px;
+  font-size: 17px;
+  font-weight: 800;
+  padding-top: 2px;
+}
+.cat-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 920px;
+}
+
+/* 内容块 */
+.block {
+  margin-bottom: 22px;
+}
+.block:last-child {
+  margin-bottom: 0;
+}
+.block h4 {
   font-size: 14px;
   margin-bottom: 12px;
+}
+.block h4 .tag {
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 8px;
 }
 .row {
   display: flex;
@@ -535,6 +661,7 @@ async function checkUpdate(): Promise<void> {
 .server-row {
   display: flex;
   gap: 10px;
+  max-width: 560px;
 }
 .server-row input {
   flex: 1;
@@ -581,9 +708,32 @@ async function checkUpdate(): Promise<void> {
   border-color: #f15e6c;
 }
 
+/* 勾选 / 单选 */
+.chk,
+.rdo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+.chk input,
+.rdo input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+.chk .muted,
+.rdo .muted {
+  font-size: 12px;
+}
+
 /* 快捷键表 */
 .sc-table {
-  max-width: 560px;
+  max-width: 620px;
 }
 .sc-row {
   display: grid;
@@ -635,28 +785,11 @@ async function checkUpdate(): Promise<void> {
   background: rgba(241, 94, 108, 0.08);
 }
 .sc-hint {
-  max-width: 560px;
+  max-width: 620px;
   color: var(--muted);
   font-size: 12px;
-  margin: 12px 0 18px;
+  margin: 12px 0 6px;
   line-height: 1.6;
-}
-.sc-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  margin: 10px 0;
-  cursor: pointer;
-}
-.sc-check input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--green);
-  cursor: pointer;
-}
-.sc-check .muted {
-  font-size: 12px;
 }
 .sc-reset {
   margin-top: 16px;

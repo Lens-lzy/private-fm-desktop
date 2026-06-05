@@ -15,12 +15,21 @@ export interface ShortcutsPrefs {
   keys: Record<string, ShortcutBinding>
 }
 
+export interface PlaybackPrefs {
+  autoplay: boolean
+  resume: boolean
+  notify: boolean
+  doubleClick: 'replace' | 'add'
+  syncRecents: boolean
+}
+
 export interface AppConfig {
   serverURL: string
   quality: string
   theme: ThemeName
   desktopLyrics: DesktopLyricsPrefs
   shortcuts: ShortcutsPrefs
+  playback: PlaybackPrefs
 }
 
 export interface LyricPushPayload {

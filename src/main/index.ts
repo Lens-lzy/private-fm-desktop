@@ -53,6 +53,8 @@ if (!app.requestSingleInstanceLock()) {
 
     // 启动几秒后静默检查更新（窗口已就绪，避免拖慢启动）
     setTimeout(() => void checkOnLaunch(), 4000)
+    // 之后每半天后台再查一次：有新版则渲染层亮红点（同版本不重复弹窗）
+    setInterval(() => void checkOnLaunch(), 12 * 60 * 60 * 1000)
 
     app.on('activate', () => {
       // 点 Dock 图标：复用已隐藏的主窗口（音乐/状态都还在），没有才新建。

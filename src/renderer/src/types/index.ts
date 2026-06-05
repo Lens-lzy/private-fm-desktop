@@ -127,6 +127,14 @@ export interface ShortcutsPrefs {
   keys: Record<string, ShortcutBinding>
 }
 
+export interface PlaybackPrefs {
+  autoplay: boolean // 启动时自动播放（默认关）
+  resume: boolean // 启动时记住上次播放进度（默认开）
+  notify: boolean // 后台时歌曲切换发系统通知（默认开）
+  doubleClick: 'replace' | 'add' // 双击单曲：替换队列 / 仅添加这首
+  syncRecents: boolean // 同步各设备最近播放
+}
+
 /** 主进程 electron-store 的运行时配置（结构与 preload AppConfig 一致）。 */
 export interface RuntimeConfig {
   serverURL: string
@@ -134,4 +142,5 @@ export interface RuntimeConfig {
   theme: ThemeName
   desktopLyrics: DesktopLyricsPrefs
   shortcuts: ShortcutsPrefs
+  playback: PlaybackPrefs
 }

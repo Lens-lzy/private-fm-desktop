@@ -21,6 +21,7 @@ import { useUpdatesStore } from '@/stores/updates'
 import { useNowPlayingSync } from '@/composables/useNowPlayingSync'
 import { useMediaKeys } from '@/composables/useMediaKeys'
 import { useShortcuts } from '@/composables/useShortcuts'
+import { useDesktopNotify } from '@/composables/useDesktopNotify'
 import { useDesktopLyricsSync } from '@/composables/useDesktopLyricsSync'
 
 const auth = useAuthStore()
@@ -37,6 +38,7 @@ const route = useRoute()
 useNowPlayingSync()
 useMediaKeys()
 useShortcuts()
+useDesktopNotify()
 useDesktopLyricsSync()
 
 const keyword = ref('')
@@ -150,6 +152,7 @@ onMounted(() => {
         </div>
         <button class="icon-btn" :class="{ active: isActive('settings') }" title="设置" @click="go('settings')">
           <Icon name="settings" :size="18" />
+          <span v-if="updates.available" class="nav-dot" title="有新版本"></span>
         </button>
         <button class="icon-btn" title="皮肤（开发中）" @click="skinSoon">
           <Icon name="shirt" :size="18" />
@@ -228,5 +231,20 @@ onMounted(() => {
   background: var(--bg-deep);
   overflow: hidden;
   position: relative;
+}
+/* 设置图标上的「有新版本」红点 */
+.icon-btn {
+  position: relative;
+}
+.nav-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f15e6c;
+  box-shadow: 0 0 0 2px var(--topbar-bg);
+  pointer-events: none;
 }
 </style>
