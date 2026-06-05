@@ -3,7 +3,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import appIcon from '../../resources/icon.png?asset'
 import { installCorsBypass } from './cors'
 import { registerSecretsIpc } from './ipc/secrets'
-import { registerConfigIpc } from './ipc/config'
+import { registerConfigIpc, migrateConfig } from './ipc/config'
 import { registerMediaIpc } from './ipc/media'
 import { registerDesktopLyricsIpc, restoreDesktopLyrics } from './ipc/desktopLyrics'
 import { registerUpdateIpc, checkOnLaunch } from './update'
@@ -33,6 +33,7 @@ if (!app.requestSingleInstanceLock()) {
       optimizer.watchWindowShortcuts(window)
     })
 
+    migrateConfig() // 纠正 beta 早期残留的本地 serverURL（须在渲染层读取配置前执行）
     installCorsBypass()
     registerSecretsIpc()
     registerConfigIpc()

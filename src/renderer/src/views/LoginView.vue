@@ -119,10 +119,9 @@ async function doRegister(): Promise<void> {
         <a @click="showServer = !showServer">{{ showServer ? '收起' : '服务器设置' }}</a>
       </div>
       <div v-if="showServer" class="server-edit">
-        <input v-model="serverInput" placeholder="http://localhost:9277" @keyup.enter="applyServer" />
+        <input v-model="serverInput" placeholder="https://fm.bonjor.fun" @keyup.enter="applyServer" />
         <button @click="applyServer">应用</button>
       </div>
-      <div class="login-hint">当前服务器：{{ settings.server }}</div>
     </div>
   </div>
 </template>
