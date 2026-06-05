@@ -22,8 +22,26 @@ export interface User {
   id: number
   username: string
   isAdmin: boolean
+  isSuper?: boolean
   mustChangePassword?: boolean
   createdAt?: string
+}
+
+export interface InviteUse {
+  username: string
+  at: string
+}
+
+export interface Invite {
+  code: string
+  createdBy: string
+  createdAt: string
+  maxUses: number
+  useCount: number
+  remaining: number
+  used: boolean
+  uses: InviteUse[]
+  usedBy?: string | null
 }
 
 export interface PlaylistMeta {

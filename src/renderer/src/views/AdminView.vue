@@ -10,6 +10,7 @@ const auth = useAuthStore()
 const ui = useUiStore()
 
 const nu = ref({ username: '', password: '', isAdmin: false })
+const inviteMax = ref(1)
 
 onMounted(() => void admin.loadAll())
 
@@ -51,16 +52,22 @@ function copy(text: string): void {
       <tbody>
         <tr v-for="u in admin.users" :key="u.id">
           <td>{{ u.username }}</td>
-          <td>{{ u.isAdmin ? '管理员' : '成员' }}</td>
+          <td>
+            <span v-if="u.isSuper" class="badge-admin">超级管理员</span>
+            <template v-else>{{ u.isAdmin ? '管理员' : '成员' }}</template>
+          </td>
           <td class="muted">{{ u.mustChangePassword ? '待改密' : '正常' }}</td>
           <td>
             <div class="user-ops">
-              <button @click="resetPwd(u)">重置密码</button>
-              <button v-if="!u.isAdmin" @click="admin.toggleAdmin(u, true)">设为管理员</button>
-              <button v-else :disabled="u.id === auth.user?.id" @click="admin.toggleAdmin(u, false)">
-                取消管理员
-              </button>
-              <button class="danger" :disabled="u.id === auth.user?.id" @click="removeUser(u)">删除</button>
+              <span v-if="u.isSuper" class="muted">站主 · 不可变更</span>
+              <template v-else>
+                <button @click="resetPwd(u)">重置密码</button>
+                <button v-if="!u.isAdmin" @click="admin.toggleAdmin(u, true)">设为管理员</button>
+                <button v-else :disabled="u.id === auth.user?.id" @click="admin.toggleAdmin(u, false)">
+                  取消管理员
+                </button>
+                <button class="danger" :disabled="u.id === auth.user?.id" @click="removeUser(u)">删除</button>
+              </template>
             </div>
           </td>
         </tr>
@@ -77,16 +84,27 @@ function copy(text: string): void {
 
     <div class="invite-box">
       <h4>邀请码</h4>
-      <button class="primary" @click="admin.genInvite()">生成邀请码</button>
+      <div class="invite-gen">
+        <label class="inv-uses">
+          可用次数
+          <input v-model.number="inviteMax" type="number" min="1" max="999" />
+        </label>
+        <button class="primary" @click="admin.genInvite(inviteMax || 1)">生成邀请码</button>
+      </div>
       <table class="user-table invite-table">
         <thead>
-          <tr><th>邀请码</th><th>状态</th><th>使用者</th><th>操作</th></tr>
+          <tr><th>邀请码</th><th>生成人</th><th>使用情况</th><th>使用者</th><th>操作</th></tr>
         </thead>
         <tbody>
           <tr v-for="iv in admin.invites" :key="iv.code">
             <td><span class="invite-code" @click="copy(iv.code)">{{ iv.code }}</span></td>
-            <td :class="{ 'invite-ok': !iv.used }">{{ iv.used ? '已使用' : '可用' }}</td>
-            <td class="muted">{{ iv.usedBy || '-' }}</td>
+            <td class="muted">{{ iv.createdBy || '-' }}</td>
+            <td :class="{ 'invite-ok': !iv.used }">
+              {{ iv.useCount ?? 0 }}/{{ iv.maxUses ?? 1 }}<span v-if="iv.used"> · 已用完</span>
+            </td>
+            <td class="muted">
+              {{ iv.uses && iv.uses.length ? iv.uses.map((x) => x.username).join('、') : '-' }}
+            </td>
             <td><button class="danger" @click="admin.delInvite(iv.code)">删除</button></td>
           </tr>
         </tbody>
@@ -96,3 +114,32 @@ function copy(text: string): void {
     <div v-if="admin.msg" class="admin-msg">{{ admin.msg }}</div>
   </div>
 </template>
+
+<style scoped>
+.invite-gen {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.inv-uses {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.inv-uses input {
+  width: 72px;
+  height: 34px;
+  border: 1px solid var(--border-2, #4a4a4a);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: var(--input-bg, #1f1f1f);
+  color: var(--text, #fff);
+  outline: none;
+}
+.inv-uses input:focus {
+  border-color: var(--green);
+}
+</style>

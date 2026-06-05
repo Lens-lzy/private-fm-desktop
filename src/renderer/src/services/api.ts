@@ -9,7 +9,8 @@ import type {
   SearchResult,
   Song,
   UrlResult,
-  User
+  User,
+  Invite
 } from '@/types'
 
 /** 与 web-music-dist/server/index.js 一一对照的 API 方法。 */
@@ -94,12 +95,9 @@ export const api = {
     ),
   adminSetAdmin: (id: number, isAdmin: boolean) =>
     http.post<{ user: User }>('/api/admin/users/' + id + '/admin', { isAdmin }),
-  adminInvites: () =>
-    http.get<{ invites: Array<{ code: string; used: boolean; usedBy?: string; createdAt?: string }> }>(
-      '/api/admin/invites'
-    ),
-  adminCreateInvite: () =>
-    http.post<{ invite: { code: string; used: boolean } }>('/api/admin/invites', {}),
+  adminInvites: () => http.get<{ invites: Invite[] }>('/api/admin/invites'),
+  adminCreateInvite: (maxUses = 1) =>
+    http.post<{ invite: Invite }>('/api/admin/invites', { maxUses }),
   adminDeleteInvite: (code: string) =>
     http.del<{ ok: true }>('/api/admin/invites/' + encodeURIComponent(code))
 }

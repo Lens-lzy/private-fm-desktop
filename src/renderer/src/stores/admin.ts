@@ -1,14 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/services/api'
-import type { User } from '@/types'
-
-interface Invite {
-  code: string
-  used: boolean
-  usedBy?: string
-  createdAt?: string
-}
+import type { User, Invite } from '@/types'
 
 /** 管理后台：用户与邀请码管理。移植 app.js admin 逻辑。 */
 export const useAdminStore = defineStore('admin', () => {
@@ -78,10 +71,10 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function genInvite(): Promise<void> {
+  async function genInvite(maxUses = 1): Promise<void> {
     msg.value = ''
     try {
-      await api.adminCreateInvite()
+      await api.adminCreateInvite(maxUses)
       await loadInvites()
     } catch (e) {
       msg.value = e instanceof Error ? e.message : '生成失败'
