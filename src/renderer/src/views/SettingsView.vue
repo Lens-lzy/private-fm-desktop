@@ -38,6 +38,30 @@ const serverInput = ref(settings.server)
 const serverMsg = ref('')
 const qualities: Quality[] = ['128k', '320k', 'flac']
 
+// ---- 修改用户名（任何账号都能改自己的）----
+const nameInput = ref(auth.user?.username || '')
+const nameMsg = ref('')
+const savingName = ref(false)
+async function saveUsername(): Promise<void> {
+  const v = nameInput.value.trim()
+  if (!v) {
+    nameMsg.value = '用户名不能为空'
+    return
+  }
+  if (v === auth.user?.username) return
+  savingName.value = true
+  nameMsg.value = ''
+  try {
+    await auth.updateUsername(v)
+    nameMsg.value = '已更新用户名'
+    setTimeout(() => (nameMsg.value = ''), 2000)
+  } catch (e) {
+    nameMsg.value = e instanceof Error ? e.message : '更新失败'
+  } finally {
+    savingName.value = false
+  }
+}
+
 async function applyServer(): Promise<void> {
   const v = serverInput.value.trim()
   if (!v) return
@@ -103,9 +127,17 @@ async function checkUpdate(): Promise<void> {
     <section class="setting-block">
       <h4>账户</h4>
       <div class="row">
-        <span class="muted">用户名</span>
-        <span>{{ auth.user?.username }}<span v-if="auth.user?.isAdmin" class="badge-admin">管理员</span></span>
+        <span class="muted">角色</span>
+        <span>{{ auth.user?.isSuper ? '超级管理员' : auth.user?.isAdmin ? '管理员' : '成员' }}</span>
       </div>
+      <div class="row"><span class="muted">用户名</span></div>
+      <div class="server-row">
+        <input v-model="nameInput" placeholder="用户名" @keyup.enter="saveUsername" />
+        <button class="primary" :disabled="savingName" @click="saveUsername">
+          {{ savingName ? '保存中…' : '保存' }}
+        </button>
+      </div>
+      <div v-if="nameMsg" class="invite-ok">{{ nameMsg }}</div>
     </section>
 
     <section class="setting-block">

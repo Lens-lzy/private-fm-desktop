@@ -2,11 +2,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useSettingsStore } from '@/stores/settings'
 import { ApiError } from '@/services/http'
 
 const auth = useAuthStore()
-const settings = useSettingsStore()
 const router = useRouter()
 
 const mode = ref<'login' | 'register'>('login')
@@ -15,18 +13,9 @@ const busy = ref(false)
 const login = ref({ username: '', password: '', error: '' })
 const reg = ref({ username: '', password: '', password2: '', inviteCode: '', error: '' })
 
-const showServer = ref(false)
-const serverInput = ref(settings.server)
-
 function msgOf(e: unknown): string {
   if (e instanceof ApiError) return e.message
   return '网络错误：' + (e instanceof Error ? e.message : String(e))
-}
-
-async function applyServer(): Promise<void> {
-  const v = serverInput.value.trim()
-  if (v) await settings.updateServer(v)
-  showServer.value = false
 }
 
 async function doLogin(): Promise<void> {
@@ -114,43 +103,6 @@ async function doRegister(): Promise<void> {
           <a @click="mode = 'login'">已有账号？去登录</a>
         </div>
       </template>
-
-      <div class="login-switch">
-        <a @click="showServer = !showServer">{{ showServer ? '收起' : '服务器设置' }}</a>
-      </div>
-      <div v-if="showServer" class="server-edit">
-        <input v-model="serverInput" placeholder="https://fm.bonjor.fun" @keyup.enter="applyServer" />
-        <button @click="applyServer">应用</button>
-      </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.server-edit {
-  display: flex;
-  gap: 8px;
-}
-.server-edit input {
-  flex: 1;
-  height: 40px;
-  border: 1px solid #3a3a3a;
-  border-radius: 6px;
-  padding: 0 14px;
-  background: #2a2a2a;
-  color: #fff;
-  outline: none;
-}
-.server-edit input:focus {
-  border-color: #fff;
-}
-.server-edit button {
-  border: none;
-  background: var(--green);
-  color: #000;
-  border-radius: 6px;
-  padding: 0 16px;
-  font-weight: 700;
-  cursor: pointer;
-}
-</style>

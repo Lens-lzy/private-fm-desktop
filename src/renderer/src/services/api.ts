@@ -26,6 +26,8 @@ export const api = {
   me: () => http.get<{ user: User }>('/api/me'),
   changePassword: (oldPassword: string, newPassword: string) =>
     http.post<{ ok: true }>('/api/me/password', { oldPassword, newPassword }),
+  updateUsername: (username: string) =>
+    http.post<{ user: User }>('/api/me/username', { username }),
 
   // ---- platforms / sources ----
   platforms: () => http.get<{ platforms: string[] }>('/api/platforms'),

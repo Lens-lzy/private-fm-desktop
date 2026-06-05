@@ -56,6 +56,12 @@ export const useAuthStore = defineStore('auth', () => {
     forceChangePassword.value = false
   }
 
+  /** 改自己的用户名（任何账号都能改）。 */
+  async function updateUsername(username: string): Promise<void> {
+    const r = await api.updateUsername(username)
+    user.value = r.user
+  }
+
   async function logout(): Promise<void> {
     await clearToken()
     user.value = null
@@ -76,6 +82,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     changePassword,
+    updateUsername,
     logout
   }
 })
