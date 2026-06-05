@@ -63,11 +63,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 </template>
 
 <style scoped>
-/* 左上角收起按钮：避开红绿灯，悬于顶部拖拽条之上且可点击 */
+/* 左上角收起按钮：紧贴红绿灯右侧，悬于顶部拖拽条之上且可点击 */
 .np-collapse {
   position: absolute;
   top: 5px;
-  left: 200px;
+  left: 80px;
   z-index: 2;
   -webkit-app-region: no-drag;
   width: 30px;

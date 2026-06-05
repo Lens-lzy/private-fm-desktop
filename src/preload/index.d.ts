@@ -13,9 +13,18 @@ export interface AppConfig {
 }
 
 export interface LyricPushPayload {
-  cur: string
-  next: string
+  top: string // 上行（双行对句的偶数句；单行模式下若 activeRow=0 即为正在唱的句）
+  bottom: string // 下行（对句的奇数句；单行模式留空）
+  activeRow: number // 0=上行正在唱，1=下行正在唱
+  start: number // 当前句开始时间(s)
+  end: number // 当前句结束时间(s)，<=start 表示无有效时长
+  pos: number // 推送时刻的播放位置(s)，供窗口侧锚定扫光
   playing: boolean
+}
+
+/** 主进程注入 twoLines 后下发给桌面歌词窗口的载荷。 */
+export interface LyricRenderPayload extends LyricPushPayload {
+  twoLines: boolean
 }
 
 export interface UpdateInfo {
@@ -74,7 +83,7 @@ export interface PFBridge {
 
 /** 桌面歌词窗口的桥（desktop-lyrics.html 用）。 */
 export interface PFLyricsBridge {
-  onLyric: (cb: (payload: { cur: string; next: string; playing: boolean; twoLines: boolean }) => void) => void
+  onLyric: (cb: (payload: LyricRenderPayload) => void) => void
   sendControl: (cmd: string) => void
   dragStart: () => void
   dragMove: (dx: number, dy: number) => void

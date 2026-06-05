@@ -9,13 +9,25 @@ import {
 } from '../windows/desktopLyricsWindow'
 
 export interface LyricPayload {
-  cur: string
-  next: string
+  top: string
+  bottom: string
+  activeRow: number
+  start: number
+  end: number
+  pos: number
   playing: boolean
   twoLines?: boolean
 }
 
-let lastPayload: LyricPayload = { cur: '', next: '', playing: false }
+let lastPayload: LyricPayload = {
+  top: '',
+  bottom: '',
+  activeRow: 0,
+  start: 0,
+  end: 0,
+  pos: 0,
+  playing: false
+}
 
 function pushToWindow(): void {
   const win = getLyricsWindow()
@@ -61,7 +73,15 @@ export function registerDesktopLyricsIpc(): void {
 
   // 主窗口推送当前/下一句 + 播放态
   ipcMain.on('pf:dl:push', (_e, payload: LyricPayload) => {
-    lastPayload = { cur: payload.cur || '', next: payload.next || '', playing: !!payload.playing }
+    lastPayload = {
+      top: payload.top || '',
+      bottom: payload.bottom || '',
+      activeRow: payload.activeRow === 1 ? 1 : 0,
+      start: Number(payload.start) || 0,
+      end: Number(payload.end) || 0,
+      pos: Number(payload.pos) || 0,
+      playing: !!payload.playing
+    }
     pushToWindow()
   })
 

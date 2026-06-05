@@ -6,8 +6,12 @@ import { contextBridge, ipcRenderer } from 'electron'
  * 拖动/缩放改由渲染层捕获鼠标 → IPC → 主进程 setPosition/setBounds 实现。
  */
 type LyricPayload = {
-  cur: string
-  next: string
+  top: string
+  bottom: string
+  activeRow: number
+  start: number
+  end: number
+  pos: number
   playing: boolean
   twoLines: boolean
 }

@@ -17,8 +17,15 @@ const api = {
     toggle: (): Promise<boolean> => ipcRenderer.invoke('pf:dl:toggle'),
     setEnabled: (on: boolean): Promise<boolean> => ipcRenderer.invoke('pf:dl:set-enabled', on),
     isShowing: (): Promise<boolean> => ipcRenderer.invoke('pf:dl:is-showing'),
-    push: (payload: { cur: string; next: string; playing: boolean }): void =>
-      ipcRenderer.send('pf:dl:push', payload),
+    push: (payload: {
+      top: string
+      bottom: string
+      activeRow: number
+      start: number
+      end: number
+      pos: number
+      playing: boolean
+    }): void => ipcRenderer.send('pf:dl:push', payload),
     // 主进程在浮窗开/关时回推状态，供「词」按钮同步
     onStateChanged: (cb: (on: boolean) => void): void => {
       ipcRenderer.removeAllListeners('pf:dl:state')
