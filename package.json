@@ -1,6 +1,6 @@
 {
   "name": "private-fm-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Private FM 桌面客户端（Electron + Vue3）—— 对标 Spotify 的私域音乐播放器",
   "main": "./out/main/index.js",
   "author": "Private FM",
