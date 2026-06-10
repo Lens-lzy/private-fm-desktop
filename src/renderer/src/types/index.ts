@@ -79,6 +79,26 @@ export interface Recommend {
   cards: ChartCard[]
 }
 
+/** 一条音乐资讯。列表不带正文 content/contentZh，详情接口才带。*Zh 为后端翻译后的中文。 */
+export interface NewsItem {
+  id: string
+  title: string
+  cover?: string
+  summary?: string
+  source?: string
+  link?: string
+  pubDate?: number
+  content?: string
+  titleZh?: string
+  summaryZh?: string
+  contentZh?: string
+}
+
+export interface NewsList {
+  updatedAt: number
+  items: NewsItem[]
+}
+
 export interface LyricLine {
   time: number
   text: string

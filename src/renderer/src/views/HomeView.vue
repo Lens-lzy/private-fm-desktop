@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import ChartCard from '@/components/ChartCard.vue'
+import NewsCarousel from '@/components/NewsCarousel.vue'
 import SongTable from '@/components/SongTable.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDiscoverStore } from '@/stores/discover'
@@ -15,6 +16,7 @@ const greeting = hour < 6 ? '夜深了' : hour < 12 ? '早上好' : hour < 18 ? 
 
 onMounted(() => {
   if (!discover.recommend.daily.length) void discover.loadRecommend()
+  if (!discover.news.length) void discover.loadNews()
 })
 
 function playDaily(): void {
@@ -25,6 +27,8 @@ function playDaily(): void {
 <template>
   <div class="home-view">
     <h1 class="list-title">{{ greeting }}，{{ auth.user?.username }}</h1>
+
+    <NewsCarousel v-if="discover.news.length" :items="discover.news" />
 
     <div class="hero-row">
       <div class="hero-shuffle" @click="discover.shufflePlay()">

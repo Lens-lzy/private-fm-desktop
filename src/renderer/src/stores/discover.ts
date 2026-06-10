@@ -3,15 +3,17 @@ import { ref } from 'vue'
 import { api } from '@/services/api'
 import { usePlayerStore } from './player'
 import { useUiStore } from './ui'
-import type { ChartCard, Featured, Recommend } from '@/types'
+import type { ChartCard, Featured, NewsItem, Recommend } from '@/types'
 
-/** 首页推荐 / 精选榜单 / 随便听听。移植 app.js featured/recommend/shuffle。 */
+/** 首页推荐 / 精选榜单 / 随便听听 / 音乐资讯。移植 app.js featured/recommend/shuffle。 */
 export const useDiscoverStore = defineStore('discover', () => {
   const featured = ref<Featured>({ updatedAt: 0, cards: [] })
   const featuredLoading = ref(false)
   const recommend = ref<Recommend>({ day: '', daily: [], cards: [] })
   const recommendLoading = ref(false)
   const shuffling = ref(false)
+  const news = ref<NewsItem[]>([])
+  const newsLoading = ref(false)
 
   async function loadFeatured(): Promise<void> {
     featuredLoading.value = true
@@ -48,6 +50,17 @@ export const useDiscoverStore = defineStore('discover', () => {
     }
   }
 
+  async function loadNews(): Promise<void> {
+    newsLoading.value = true
+    try {
+      news.value = (await api.news()).items || []
+    } catch {
+      /* 静默：失败保持原值，轮播自动隐藏 */
+    } finally {
+      newsLoading.value = false
+    }
+  }
+
   function playCard(card: ChartCard): void {
     if (card.songs && card.songs.length) usePlayerStore().playList(card.songs, 0)
   }
@@ -66,8 +79,11 @@ export const useDiscoverStore = defineStore('discover', () => {
     recommend,
     recommendLoading,
     shuffling,
+    news,
+    newsLoading,
     loadFeatured,
     loadRecommend,
+    loadNews,
     shufflePlay,
     playCard,
     featuredTime

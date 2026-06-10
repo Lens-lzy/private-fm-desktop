@@ -3,6 +3,8 @@ import type {
   AuthResponse,
   ChartCard,
   Featured,
+  NewsItem,
+  NewsList,
   PlaylistDetail,
   PlaylistMeta,
   Recommend,
@@ -60,6 +62,10 @@ export const api = {
   recommend: (force = false) =>
     http.get<Recommend>('/api/recommend' + (force ? '?force=1' : '')),
   shuffle: () => http.get<{ songs: Song[] }>('/api/shuffle'),
+
+  // ---- news (音乐资讯) ----
+  news: () => http.get<NewsList>('/api/news'),
+  newsDetail: (id: string) => http.get<{ item: NewsItem }>('/api/news/' + encodeURIComponent(id)),
 
   // ---- history ----
   recordHistory: (song: Song) => http.post<{ ok: true }>('/api/history', { song }),
